@@ -3,7 +3,7 @@ Get your images converted for fast load times! webpCreate scans a directory for 
 
 webpCreate is a Zsh script for batch-converting `.jpg`, `.jpeg`, and `.png` files into `.webp` format with optional overwrite/increment/skip behavior. It organizes originals and `.webp` output into subfolders and reports file size savings.
 
-I use it straight from my MacOS terminal window. First, I use "cd" to get to the directory with my images (often a big dump of images from a client, or a photoshop batcnh export). Then I type "webpCreate" and watch the magic happen.
+I use it straight from my MacOS terminal window. First, I use "cd" to get to the directory with my images (often a big dump of images from a client, or a photoshop batch export). Then I type "webpCreate" and watch the magic happen.
 
 ## 🛠 Features
 
@@ -21,3 +21,7 @@ I use it straight from my MacOS terminal window. First, I use "cd" to get to the
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)
 **
+
+## DON'T FORGET: After the installation, run "source ~/.zshrc" to get the full update.
+
+
