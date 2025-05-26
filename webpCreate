@@ -3,13 +3,38 @@ setopt null_glob
 
 echo "🛠  Running webpCreate in: $(pwd)"
 
-# Check cwebp
+# --- Early Ghost File Detection ---
+jpg_patterns=( *.jpg(N) *.JPG(N) *.jpeg(N) *.JPEG(N) )
+png_patterns=( *.png(N) *.PNG(N) )
+all_patterns=( "${jpg_patterns[@]}" "${png_patterns[@]}" )
+
+ghosts=()
+for f in "${all_patterns[@]}"; do
+  [[ -e $f && ! -f $f ]] && ghosts+=("$f")
+done
+
+if (( ${#ghosts[@]} )); then
+  echo "⚠️  Detected ${#ghosts[@]} ghost (not downloaded) file(s):"
+  printf ' - %s\n' "${ghosts[@]}"
+  echo ""
+  echo "What would you like to do?"
+  echo "  [1] Continue with downloaded files only"
+  echo "  [2] Quit and sync these files first"
+  echo -n "Enter choice [1/2]: "
+  read choice
+  case $choice in
+    1) echo "✅ Proceeding with available files only...";;
+    *) echo "👋 Exiting—please download those files and re-run."; exit 0 ;;
+  esac
+fi
+
+# --- Require cwebp ---
 if ! command -v cwebp &> /dev/null; then
   echo "❌ cwebp not found. Install with: brew install webp"
   exit 1
 fi
 
-# Initialize
+# Initialize counters and accumulators
 converted_jpg=false
 converted_png=false
 jpg_count=0
@@ -18,30 +43,28 @@ webp_count=0
 jpg_size=0
 png_size=0
 webp_size=0
-ghost_files=()
 
 human_size() {
-  bytes=$1
-  echo "$((bytes / 1024 / 1024)).$(( (bytes / 1024) % 1024 * 100 / 1024 )) MB"
+  local bytes=$1
+  printf "%d.%02d MB" $((bytes/1024/1024)) $(((bytes/1024)%1024*100/1024))
 }
 
 ask_file_action() {
-  local file="$1"
+  local file=$1
   while true; do
-    echo "⚠️  '$file' already exists in WEBP/. (o)verwrite / (i)ncrement / (s)kip?"
-    read -sk1 choice
-    echo ""
+    echo "⚠️  'WEBP/$file' already exists. (o)verwrite / (i)ncrement / (s)kip?"
+    read -sk1 choice; echo ""
     case $choice in
-      o|O) return 0 ;;
-      i|I) return 1 ;;
-      s|S) return 2 ;;
-      *) echo "❓ Invalid choice. Press o, i, or s." ;;
+      [oO]) return 0 ;;
+      [iI]) return 1 ;;
+      [sS]) return 2 ;;
+      *) echo "❓ Press o, i, or s." ;;
     esac
   done
 }
 
 convert_and_handle_conflict() {
-  local input="$1"
+  local input=$1
   local base="${input%.*}"
   local out="${base}.webp"
 
@@ -50,8 +73,7 @@ convert_and_handle_conflict() {
   if [[ -e "WEBP/$out" ]]; then
     ask_file_action "$out"
     action=$?
-    if [[ $action -eq 0 ]]; then
-      cwebp -q 80 "$input" -o "$out"
+    if   [[ $action -eq 0 ]]; then cwebp -q 80 "$input" -o "$out"
     elif [[ $action -eq 1 ]]; then
       n=1
       while [[ -e "WEBP/${base}_$n.webp" ]]; do ((n++)); done
@@ -64,51 +86,18 @@ convert_and_handle_conflict() {
     cwebp -q 80 "$input" -o "$out"
   fi
 
-  [[ -e "$out" ]] && mv "$out" WEBP/ && return 0
+  mv "$out" WEBP/ && return 0
   return 1
 }
 
-# --- Ghost file detector ---
-check_ghosts() {
-  local arr=()
-  for file in "$@"; do
-    [[ -e "$file" && ! -f "$file" ]] && arr+=("$file")
-  done
-  echo "${arr[@]}"
-}
-
-# --- File matching ---
-jpg_files=( *.jpg(N) *.JPG(N) *.jpeg(N) *.JPEG(N) )
-png_files=( *.png(N) *.PNG(N) )
-all_files=("${jpg_files[@]}" "${png_files[@]}")
-
-# --- Check for ghost files ---
-ghosts=($(check_ghosts "${all_files[@]}"))
-ghost_count=${#ghosts[@]}
-
-if (( ghost_count > 0 )); then
-  echo "⚠️  Detected $ghost_count ghost (not fully downloaded) file(s):"
-  for g in $ghosts; do echo " - $g"; done
-  echo ""
-  echo "What would you like to do?"
-  echo "  [1] Proceed with downloaded files only"
-  echo "  [2] Attempt to sync/download missing files (may use lots of drive space)"
-  echo "  [3] Quit"
-  echo -n "Enter choice: "
-  read choice
-  case $choice in
-    1) echo "✅ Continuing with available files only...";;
-    2) echo "⚠️  Sync not implemented. Please open these files manually in Finder to force download, then re-run."; exit 2 ;;
-    *) echo "👋 Exiting."; exit 0 ;;
-  esac
-fi
-
-# --- Convert JPG/JPEG ---
-if (( ${#jpg_files[@]} > 0 )); then
+# --- Convert JPG/JPEG Variants ---
+jpg_files=( "${jpg_patterns[@]}" )
+if (( ${#jpg_files[@]} )); then
   mkdir -p JPG
-  for file in $jpg_files; do
-    [[ -f "$file" ]] || continue
+  for file in "${jpg_files[@]}"; do
+    [[ -f $file ]] || continue
     size=$(stat -f%z "$file")
+    echo "➡️ Converting $file"
     if convert_and_handle_conflict "$file"; then
       mv "$file" JPG/
       ((jpg_count++))
@@ -118,12 +107,14 @@ if (( ${#jpg_files[@]} > 0 )); then
   done
 fi
 
-# --- Convert PNG ---
-if (( ${#png_files[@]} > 0 )); then
+# --- Convert PNG Variants ---
+png_files=( "${png_patterns[@]}" )
+if (( ${#png_files[@]} )); then
   mkdir -p PNG
-  for file in $png_files; do
-    [[ -f "$file" ]] || continue
+  for file in "${png_files[@]}"; do
+    [[ -f $file ]] || continue
     size=$(stat -f%z "$file")
+    echo "➡️ Converting $file"
     if convert_and_handle_conflict "$file"; then
       mv "$file" PNG/
       ((png_count++))
@@ -133,31 +124,31 @@ if (( ${#png_files[@]} > 0 )); then
   done
 fi
 
-# --- Count WEBP output ---
-webp_files=(WEBP/*.webp(N))
-for w in $webp_files; do
+# --- Tally WEBP Outputs ---
+webp_files=( WEBP/*.webp(N) )
+for w in "${webp_files[@]}"; do
   size=$(stat -f%z "$w")
   ((webp_count++))
   ((webp_size+=size))
 done
 
-# --- Summary ---
-total_input_size=$((jpg_size + png_size))
-total_saved=$((total_input_size - webp_size))
+# --- Final Summary ---
+total_input=$((jpg_size + png_size))
+total_saved=$((total_input - webp_size))
 
 echo ""
 echo "✅ Conversion Summary:"
-[[ $jpg_count -gt 0 ]] && echo " - Converted JPG/JPEG files: $jpg_count → $(human_size $jpg_size)"
-[[ $png_count -gt 0 ]] && echo " - Converted PNG files:      $png_count → $(human_size $png_size)"
-[[ $webp_count -gt 0 ]] && echo " - Converted WEBP files:     $webp_count → $(human_size $webp_size)"
+(( jpg_count > 0 )) && echo " - Converted JPG/JPEG files: $jpg_count → $(human_size $jpg_size)"
+(( png_count > 0 )) && echo " - Converted PNG files:      $png_count → $(human_size $png_size)"
+(( webp_count > 0 )) && echo " - Converted WEBP files:     $webp_count → $(human_size $webp_size)"
 
-if (( total_input_size > 0 && webp_size > 0 )); then
-  percent=$(( (total_saved * 1000 / total_input_size + 5) / 10 ))
-  echo " - Total Original Size:      $(human_size $total_input_size)"
+if (( total_input > 0 && webp_size > 0 )); then
+  reduction=$(( (total_saved*1000/total_input+5)/10 ))
+  echo " - Total Original Size:      $(human_size $total_input)"
   echo " - Total WEBP Size:          $(human_size $webp_size)"
-  echo " - Size Savings:             $(human_size $total_saved) ($percent% reduction)"
-elif (( total_input_size > 0 )); then
-  echo "⚠️  No .webp files created despite original file conversion attempts."
+  echo " - Size Savings:             $(human_size $total_saved) ($reduction% reduction)"
+elif (( total_input > 0 )); then
+  echo "⚠️  Conversion attempted but no WEBP files created."
 else
   echo "❌ No files were converted."
 fi
