@@ -1,180 +1,32 @@
-#!/bin/zsh
-setopt null_glob
+#!/bin/bash
 
-echo "🛠  Running webpCreate in: $(pwd)"
+set -e
 
-# — Early Ghost File Detection (zero-byte Google Drive placeholders) —
-jpg_patterns=( *.jpg(N) *.JPG(N) *.jpeg(N) *.JPEG(N) )
-png_patterns=( *.png(N) *.PNG(N) )
-all_patterns=( "${jpg_patterns[@]}" "${png_patterns[@]}" )
+echo "🔧 Updating Homebrew..."
+brew update
 
-ghosts=()
-for f in "${all_patterns[@]}"; do
-  # exists but zero‐size → ghost
-  [[ -e $f && ! -s $f ]] && ghosts+=("$f")
-done
+echo "📦 Installing or upgrading webp (includes cwebp)..."
+brew list webp &>/dev/null && brew upgrade webp || brew install webp
 
-if (( ${#ghosts[@]} > 0 )); then
-  echo "⚠️  Detected ${#ghosts[@]} ghost (not downloaded) file(s):"
-  printf ' - %s\n' "${ghosts[@]}"
-  echo ""
-  echo "What would you like to do?"
-  echo "  [1] Continue with downloaded files only"
-  echo "  [2] Quit and sync these files first (may use lots of drive space)"
-  echo "  [3] Quit"
-  echo -n "Enter choice [1/2/3]: "
-  read choice
-  case $choice in
-    1) echo "✅ Proceeding with available files only...";;
-    2) echo "👋 Please download those files (e.g. open them in Finder), then re-run."; exit 0 ;;
-    *) echo "👋 Exiting."; exit 0 ;;
-  esac
+echo "📁 Creating ~/scripts directory..."
+mkdir -p "$HOME/scripts"
+
+echo "⬇️  Downloading webpCreate script from GitHub..."
+curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/webpCreate > "$HOME/scripts/webpCreate"
+
+echo "🔐 Making script executable..."
+chmod +x "$HOME/scripts/webpCreate"
+
+# Add to PATH only if not already present
+if ! grep -q 'export PATH="$HOME/scripts:$PATH"' "$HOME/.zshrc"; then
+  echo 'export PATH="$HOME/scripts:$PATH"' >> "$HOME/.zshrc"
+  echo "🛠  Added ~/scripts to your PATH in ~/.zshrc"
 fi
-
-# — Ask for maximum dimension —
-echo -n "Enter maximum dimension (in pixels) for the longest side, e.g. 1200: "
-read maxDim
-if ! [[ "$maxDim" =~ ^[0-9]+$ ]]; then
-  echo "❌ Invalid number: $maxDim"; exit 1
-fi
-echo "♻️  Will resize images so their longest side is ${maxDim}px."
-
-# — Ensure cwebp is installed —
-if ! command -v cwebp &> /dev/null; then
-  echo "❌ cwebp not found. Install with: brew install webp"
-  exit 1
-fi
-
-# — Initialize counters & accumulators —
-jpg_count=0; png_count=0; webp_count=0
-jpg_size=0; png_size=0; webp_size=0
-
-human_size() {
-  local bytes=$1
-  printf "%d.%02d MB" $((bytes/1024/1024)) $(((bytes/1024)%1024*100/1024))
-}
-
-ask_file_action() {
-  local file="$1"
-  while true; do
-    echo "⚠️  WEBP/$file exists. (o)verwrite / (i)ncrement / (s)kip?"
-    read -sk1 choice; echo ""
-    case $choice in
-      [oO]) return 0 ;;
-      [iI]) return 1 ;;
-      [sS]) return 2 ;;
-      *) echo "❓ Press o, i, or s." ;;
-    esac
-  done
-}
-
-convert_and_handle_conflict() {
-  local input="$1"
-  local base="${input%.*}"
-  local suffix="$maxDim"
-  local out="${base}-${suffix}.webp"
-
-  # get original dimensions
-  local w h newW newH
-  w=$(sips -g pixelWidth  "$input" | awk '/pixelWidth/ {print $2}')
-  h=$(sips -g pixelHeight "$input" | awk '/pixelHeight/ {print $2}')
-
-  if (( w >= h )); then
-    newW=$suffix; newH=0
-  else
-    newW=0; newH=$suffix
-  fi
-
-  mkdir -p WEBP
-
-  if [[ -e "WEBP/$out" ]]; then
-    ask_file_action "$out"
-    action=$?
-    if   [[ $action -eq 0 ]]; then
-      cwebp -q 80 -resize $newW $newH "$input" -o "$out"
-    elif [[ $action -eq 1 ]]; then
-      local n=1
-      while [[ -e "WEBP/${base}-${suffix}_$n.webp" ]]; do ((n++)); done
-      out="${base}-${suffix}_$n.webp"
-      cwebp -q 80 -resize $newW $newH "$input" -o "$out"
-    else
-      return 1
-    fi
-  else
-    cwebp -q 80 -resize $newW $newH "$input" -o "$out"
-  fi
-
-  mv "$out" WEBP/ && return 0
-  return 1
-}
-
-# — Build lists of downloaded (non-ghost) files —
-jpg_files=()
-for f in "${jpg_patterns[@]}"; do
-  [[ -f $f && -s $f ]] && jpg_files+=("$f")
-done
-
-png_files=()
-for f in "${png_patterns[@]}"; do
-  [[ -f $f && -s $f ]] && png_files+=("$f")
-done
-
-# — Convert JPG/JPEG variants —
-if (( ${#jpg_files[@]} > 0 )); then
-  mkdir -p JPG
-  for file in "${jpg_files[@]}"; do
-    local size=$(stat -f%z "$file")
-    echo "➡️ Converting $file"
-    if convert_and_handle_conflict "$file"; then
-      mv "$file" JPG/
-      ((jpg_count++))
-      ((jpg_size+=size))
-    fi
-  done
-else
-  echo "⚠️ No JPG/JPEG files to process."
-fi
-
-# — Convert PNG variants —
-if (( ${#png_files[@]} > 0 )); then
-  mkdir -p PNG
-  for file in "${png_files[@]}"; do
-    local size=$(stat -f%z "$file")
-    echo "➡️ Converting $file"
-    if convert_and_handle_conflict "$file"; then
-      mv "$file" PNG/
-      ((png_count++))
-      ((png_size+=size))
-    fi
-  done
-else
-  echo "⚠️ No PNG files to process."
-fi
-
-# — Tally WEBP outputs —
-webp_files=( WEBP/*.webp(N) )
-for w in "${webp_files[@]}"; do
-  ((webp_count++))
-  webp_size=$((webp_size + $(stat -f%z "$w")))
-done
-
-# — Final Summary —
-total_input=$((jpg_size + png_size))
-total_saved=$((total_input - webp_size))
 
 echo ""
-echo "✅ Conversion Summary:"
-(( jpg_count  > 0 )) && echo " - Converted JPG/JPEG files: $jpg_count → $(human_size $jpg_size)"
-(( png_count  > 0 )) && echo " - Converted PNG files:      $png_count → $(human_size $png_size)"
-(( webp_count > 0 )) && echo " - Converted WEBP files:     $webp_count → $(human_size $webp_size)"
-
-if (( total_input > 0 && webp_size > 0 )); then
-  reduction=$(( (total_saved * 1000 / total_input + 5) / 10 ))
-  echo " - Total Original Size:      $(human_size $total_input)"
-  echo " - Total WEBP Size:          $(human_size $webp_size)"
-  echo " - Size Savings:             $(human_size $total_saved) ($reduction% reduction)"
-elif (( total_input > 0 )); then
-  echo "⚠️ Conversion attempted but no WEBP files created."
-else
-  echo "❌ No files were converted."
-fi
+echo "✅ Done!"
+echo "➡️  Run the following to use webpCreate:"
+echo ""
+echo "   source ~/.zshrc"
+echo "   cd /path/to/images"
+echo "   webpCreate"
