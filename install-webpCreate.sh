@@ -31,19 +31,25 @@ curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/update-we
   -o "$HOME/scripts/update-webpCreate"
 chmod +x "$HOME/scripts/update-webpCreate"
 
-# Add scripts dir to PATH if not already present
-if ! grep -q 'export PATH="\$HOME/scripts:\$PATH"' "$HOME/.zshrc"; then
+echo "📄 Installing man page…"
+MAN_DIR="/usr/local/share/man/man1"
+mkdir -p "$MAN_DIR"
+curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/man/webpCreate.1 \
+  -o "$MAN_DIR/webpCreate.1"
+chmod 644 "$MAN_DIR/webpCreate.1"
+
+# Update ~/.zshrc
+if ! grep -q 'export PATH="$HOME/scripts:$PATH"' "$HOME/.zshrc"; then
   echo 'export PATH="$HOME/scripts:$PATH"' >> "$HOME/.zshrc"
   echo "🛠  Added ~/scripts to your PATH in ~/.zshrc"
 fi
 
-# Add a convenient alias for updates
 if ! grep -q 'alias update-webpCreate=' "$HOME/.zshrc"; then
   echo 'alias update-webpCreate="$HOME/scripts/update-webpCreate"' >> "$HOME/.zshrc"
-  echo "🛠  Added alias \`update-webpCreate\` to ~/.zshrc"
+  echo "🛠  Added alias update-webpCreate to ~/.zshrc"
 fi
 
 echo ""
 echo "✅ Installation complete!"
 echo "👉 Run \`source ~/.zshrc\` to load your new PATH and alias."
-echo "👉 Then try \`webpCreate --help\` or \`update-webpCreate\`."
+echo "👉 Then try \`man webpCreate\` and \`webpCreate --help\`."
