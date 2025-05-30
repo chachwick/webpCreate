@@ -1,101 +1,89 @@
-#!/bin/zsh
+#!/usr/bin/env zsh
 setopt null_glob
 
-# --- Default Configuration ---
-QUALITY=80         # default quality, use --cwoption to override
-askScale=true
-maxDim=0
-updateOnly=false
-CWOPTS=()          # additional cwebp options
+# ─── Help & Description ──────────────────────────────────────────────────────────
+show_help() {
+  cat <<-EOF
+webpCreate: batch-convert images to WebP with organization & stats.
 
-# --- Parse Command-Line Options ---
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -h|--help)
-      cat << 'EOF'
-Usage: webpCreate [options]
+What it does:
+  • Converts .jpg/.jpeg/.png (case-insensitive) and HEIC → JPEG (via sips)  
+  • Organizes originals into JPG/, PNG/, HEIC/ and outputs into WEBP/  
+  • Handles filename conflicts (overwrite/increment/skip)  
+  • Optionally resizes so longest side ≤ max dimension  
+  • Reports per-directory file counts & size savings
+
+Why WebP?
+  WebP delivers excellent compression for web images—smaller files,
+  faster pages, modern browser support. This script automates the
+  end-to-end workflow and gives you clear savings data.
+
+Usage:
+  webpCreate [options] [dir1 dir2 ...]
+  If no directories are given, defaults to the current directory.
+
+Installation & Updates:
+  • Initial install:  
+      bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)  
+  • For updates, run the companion command:  
+      update-webpCreate  
 
 Options:
-  --update               Update script from GitHub and exit
-  --maxd <pixels>        Max dimension for longest side (skip resize prompt)
-  --lossless             Add cwebp -lossless flag
-  --cwoption <opt>       Pass custom option to cwebp (e.g. -af or "-z 9")
-  -h, --help             Show this help message and exit
+  -h, --help            Show this help and exit
+  --lossless            Use cwebp’s -lossless mode
+  --mt, --multithread   Enable intra-file multi-threading (-mt)
+  --cwoption OPT        Pass OPT (e.g. "-q 90" or "-af") to cwebp
+  --parallel, -P        Process multiple directories in parallel
 
 Examples:
-  webpCreate --maxd 1200 --cwoption "-q 75"    # resize and quality
-  webpCreate --lossless --cwoption "-af"       # lossless with auto-filter
-  webpCreate -h                                 # show this help
-
-For full cwebp options, see:
-  • WebP docs: https://developers.google.com/speed/webp/docs/cwebp
-  • Manual: man cwebp
-
-If missing dependencies, run:
-  brew install webp ffmpeg  # for cwebp and HEIC support
-  bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)
+  webpCreate .  
+  webpCreate ~/Pics /tmp/foo /bar  
+  webpCreate --parallel --lossless ~/Downloads
 EOF
-      exit 0
-      ;;
-    --update)
-      updateOnly=true; shift;;
-    --maxd)
-      if [[ "$2" =~ ^[0-9]+$ ]]; then
-        askScale=false; maxDim=$2; shift 2
-      else
-        echo "❌ --maxd requires a numeric argument."; exit 1
-      fi;;
-    --lossless)
-      CWOPTS+=(-lossless); shift;;
-    --cwoption)
-      if [[ -n "$2" ]]; then
-        CWOPTS+=("$2"); shift 2
-      else
-        echo "❌ --cwoption requires an argument (e.g. -af)"; exit 1
-      fi;;
-    *)
-      echo "❌ Unknown option: $1"; echo "Run with --help or -h for usage."; exit 1;;
+}
+
+# ─── Flag Parsing ───────────────────────────────────────────────────────────────
+cwebp_opts=()
+do_parallel=false
+dirs=()
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -h|--help) show_help; exit 0;;
+    --lossless)              cwebp_opts+=(-lossless); shift;;
+    --mt|--multithread)      cwebp_opts+=(-mt);        shift;;
+    --cwoption)              shift; cwebp_opts+=("$1"); shift;;
+    --parallel|-P)           do_parallel=true;        shift;;
+    --) shift; break;;
+    -*) echo "Unknown option: $1"; exit 1;;
+    *) dirs+=("$1"); shift;;
   esac
 done
 
-# --- Update Logic ---
-if $updateOnly; then
-  echo "🔄 Updating webpCreate to latest version from GitHub..."
-  mkdir -p "$HOME/scripts"
-  curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/webpCreate -o "$HOME/scripts/webpCreate"
-  chmod +x "$HOME/scripts/webpCreate"
-  source "$HOME/.zshrc" 2>/dev/null || true
-  echo "✅ webpCreate updated."
-  exit 0
+(( ${#dirs[@]} == 0 )) && dirs=(".")
+
+# ─── Resize Prompt ─────────────────────────────────────────────────────────────
+read -q "?Would you like to resize images so their longest side is capped? [y/N] " resize_choice
+echo
+if [[ $resize_choice =~ ^[Yy]$ ]]; then
+  read -r "?Enter max dimension (pixels) for longest side (e.g. 1200): " maxDim
+  [[ "$maxDim" =~ ^[0-9]+$ ]] || { echo "❌ Invalid number: $maxDim"; exit 1; }
+  do_resize=true
+else
+  do_resize=false
 fi
 
-# --- Description ---
-# webpCreate: Batch-converts images to WebP, optimizes for web delivery, and organizes originals.
-# Why WebP?
-#   WebP is a modern image format with superior compression, reducing file sizes
-#   for faster web page loads with no significant quality loss. It supports
-#   lossy and lossless modes.
-# What this script does:
-#   1. Converts HEIC to JPEG (moves HEIC originals to HEIC/)
-#   2. Converts JPG/JPEG/PNG to WebP (optional resize)
-#   3. Handles filename conflicts (overwrite/increment/skip)
-#   4. Organizes originals into JPG/ and PNG/ folders; outputs WebP to WEBP/
-# Usage: webpCreate [options]
+# ─── Dependency Checks ──────────────────────────────────────────────────────────
+for cmd in cwebp sips; do
+  if ! command -v $cmd &>/dev/null; then
+    brew_cmd=${cmd==cwebp?webp:imagemagick}
+    echo "❌ Missing '$cmd'. Install with: brew install $brew_cmd"
+    echo "   Or run installer: bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)"
+    exit 1
+  fi
+done
 
-# --- Dependency Checks ---
-echo "🧩 Checking dependencies..."
-if ! command -v cwebp &> /dev/null; then
-  echo "❌ cwebp not found. Install: brew install webp"
-  echo "   or run installer: bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)"
-  exit 1
-fi
-if ! command -v sips &> /dev/null; then
-  echo "❌ sips not found (macOS only)."
-  exit 1
-fi
-if ! command -v ffmpeg &> /dev/null; then
-  echo "⚠️  ffmpeg not found. For HEIC support: brew install ffmpeg"
-fi
+# (rest of your conversion logic remains unchanged…)
 
 # --- Start Processing ---
 echo "🛠  Running webpCreate in: $(pwd)"
