@@ -11,7 +11,6 @@ curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/update-we
   -o "$HOME/scripts/update-webpCreate"
 chmod +x "$HOME/scripts/update-webpCreate"
 echo ""
-echo "✅ Done! Your webpCreate is now up to date."
-echo "👉 Run `source ~/.zshrc` to load your new PATH and alias."
-echo "👉 Then try `webpCreate -h`."
-
+echo "✅ Update complete!"
+echo "👉 Run \`source ~/.zshrc\` to load your new PATH and alias."
+echo "👉 Then try \`webpCreate --help\`."
