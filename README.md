@@ -1,6 +1,6 @@
 # webpCreate
 
-**Batch-convert images to WebP** with organization, optional resizing, multi-threading, parallel directories, conflict handling, and a clear savings report.
+**Batch-convert images to WebP** with organization, optional resizing, multi-threading, parallel directories, conflict handling, and a clear savings report. The script relies on cwebp 
 
 ---
 
