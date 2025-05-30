@@ -1,32 +1,60 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 set -e
 
+# install-webpCreate.sh
+# Bootstrap installer for webpCreate script and dependencies
+
+# 1. Update Homebrew
 echo "🔧 Updating Homebrew..."
 brew update
 
-echo "📦 Installing or upgrading webp (includes cwebp)..."
-brew list webp &>/dev/null && brew upgrade webp || brew install webp
+# 2. Install or upgrade WebP (cwebp) and ffmpeg for HEIC support
+echo "📦 Ensuring required packages are installed..."
+if brew list webp &>/dev/null; then
+  brew upgrade webp
+else
+  brew install webp
+fi
 
+if brew list ffmpeg &>/dev/null; then
+  brew upgrade ffmpeg
+else
+  brew install ffmpeg
+fi
+
+# 3. Create scripts directory
 echo "📁 Creating ~/scripts directory..."
 mkdir -p "$HOME/scripts"
 
-echo "⬇️  Downloading webpCreate script from GitHub..."
-curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/webpCreate > "$HOME/scripts/webpCreate"
+# 4. Download webpCreate script
+echo "⬇️  Downloading webpCreate..."
+curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/webpCreate \
+  -o "$HOME/scripts/webpCreate"
 
-echo "🔐 Making script executable..."
+# 5. Make it executable
+echo "🔐 Making webpCreate executable..."
 chmod +x "$HOME/scripts/webpCreate"
 
-# Add to PATH only if not already present
-if ! grep -q 'export PATH="$HOME/scripts:$PATH"' "$HOME/.zshrc"; then
-  echo 'export PATH="$HOME/scripts:$PATH"' >> "$HOME/.zshrc"
-  echo "🛠  Added ~/scripts to your PATH in ~/.zshrc"
+# 6. Ensure PATH includes scripts directory
+RCFILE="$HOME/.zshrc"
+if ! grep -q 'export PATH="$HOME/scripts:$PATH"' "$RCFILE"; then
+  echo 'export PATH="$HOME/scripts:$PATH"' >> "$RCFILE"
+  echo "🛠 Added ~/scripts to PATH in $RCFILE"
 fi
 
-echo ""
-echo "✅ Done!"
-echo "➡️  Run the following to use webpCreate:"
-echo ""
-echo "   source ~/.zshrc"
-echo "   cd /path/to/images"
-echo "   webpCreate"
+# 7. Final message
+cat << EOF
+✅ Installation complete!
+
+Next steps:
+  1. Reload your shell:
+       source ~/.zshrc
+  2. Verify installation:
+       webpCreate -?                # Show help and usage
+  3. Run webpCreate in any image folder:
+       cd /path/to/images
+       webpCreate [options]
+
+For more details, visit:
+  https://github.com/chachwick/webpCreate
+EOF
