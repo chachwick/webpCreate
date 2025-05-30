@@ -5,43 +5,19 @@ setopt null_glob
 show_help() {
   cat <<-EOF
 webpCreate: batch-convert images to WebP with organization & stats.
-
-What it does:
-  • Converts .jpg/.jpeg/.png (case-insensitive) and HEIC → JPEG (via sips)  
-  • Organizes originals into JPG/, PNG/, HEIC/ and outputs into WEBP/  
-  • Handles filename conflicts (overwrite/increment/skip)  
-  • Optionally resizes so longest side ≤ max dimension  
-  • Reports per-directory file counts & size savings
-
-Why WebP?
-  WebP delivers excellent compression for web images—smaller files,
-  faster pages, modern browser support. This script automates the
-  end-to-end workflow and gives you clear savings data.
-
-Usage:
-  webpCreate [options] [dir1 dir2 ...]
-  If no directories are given, defaults to the current directory.
-
-Installation & Updates:
-  • Initial install:  
-      bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)  
-  • For updates, run the companion command:  
-      update-webpCreate  
-
+Usage: webpCreate [options] [dir1 dir2 ...]
 Options:
-  -h, --help            Show this help and exit
-  --lossless            Use cwebp’s -lossless mode
-  --mt, --multithread   Enable intra-file multi-threading (-mt)
-  --cwoption OPT        Pass OPT (e.g. "-af") to cwebp
-  -q, --quality Q       Set cwebp quality to Q (e.g. 75)
-  --maxd N              Resize longest side to at most N pixels (non-interactive)
-  --parallel, -P        Process multiple directories in parallel
+  -h, --help        Show this help and exit
+  -q, --quality Q   Set cwebp quality (default 80)
+  --maxd N          Resize longest side to ≤ N px (non-interactive)
+  --lossless        cwebp -lossless
+  --mt              cwebp -mt (multi-thread)
+  --cwoption OPT    Pass OPT to cwebp
+  --parallel, -P    Process directories in parallel
 
-Examples:
-  webpCreate .  
-  webpCreate ~/Pics /tmp/foo /bar  
-  webpCreate --parallel --lossless --mt ~/Downloads  
-  webpCreate -q 90 --maxd 1200 ./images
+For full reference, see the manual:  
+  man webpCreate
+
 EOF
 }
 
