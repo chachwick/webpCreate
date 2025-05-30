@@ -21,6 +21,8 @@ Why WebP?
 Usage:
   webpCreate [options] [dir1 dir2 ...]
   If no directories are given, defaults to the current directory.
+  
+  Full documentation & examples: https://github.com/chachwick/webpCreate#readme
 
 Installation & Updates:
   • Initial install:  
