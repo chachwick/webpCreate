@@ -12,3 +12,6 @@ curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/update-we
 chmod +x "$HOME/scripts/update-webpCreate"
 
 echo "✅ Done! Your webpCreate is now up to date."
+echo "Don't forget to run 'source ~/.zshrc'"
+echo "To test, 'webpCreate -h'"
+
