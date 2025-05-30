@@ -11,7 +11,14 @@ curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/update-we
   -o "$HOME/scripts/update-webpCreate"
 chmod +x "$HOME/scripts/update-webpCreate"
 
-echo
+echo "📄 Updating man page…"
+MAN_DIR="/usr/local/share/man/man1"
+mkdir -p "$MAN_DIR"
+curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/man/webpCreate.1 \
+  -o "$MAN_DIR/webpCreate.1"
+chmod 644 "$MAN_DIR/webpCreate.1"
+
+echo ""
 echo "✅ Update complete!"
-echo '👉 Run `source ~/.zshrc` to load your new PATH and alias.'
-echo '👉 Then try `webpCreate --help`.'
+echo "👉 Run \`source ~/.zshrc\` if you haven’t already."
+echo "👉 Then try \`man webpCreate\` and \`webpCreate --help\`."
