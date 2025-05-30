@@ -1,0 +1,52 @@
+.\" Manpage for webpCreate
+.TH WEBPCREATE 1 "June 2025" "v1.0" "webpCreate manual"
+.SH NAME
+webpCreate \- batch-convert images to WebP with organization & stats
+.SH SYNOPSIS
+.B webpCreate
+[\fIoptions\fR] [\fBdir1 dir2 ...\fR]
+.SH DESCRIPTION
+Convert JPEG, PNG (case-insensitive), and HEIC (via \fIsips\fR) files to WebP format.  
+Original files are moved into subdirectories (JPG/, PNG/, HEIC/) and outputs into WEBP/.  
+Reports per-directory file counts, sizes, and percentage savings.
+.SH OPTIONS
+.TP
+.B \-h , \-\-help
+Show brief help message and exit.
+.TP
+.B \-q , \-\-quality \fIQ\fR
+Set \fBcwebp\fR quality to \fIQ\fR (0–100; default 80).
+.TP
+.B \-\-maxd \fIN\fR
+Resize longest side to at most \fIN\fR pixels (non-interactive).
+.TP
+.B \-\-lossless
+Use loseless compression (passes \fB\-lossless\fR to \fBcwebp\fR).
+.TP
+.B \-\-mt , \-\-multithread
+Enable intra-file multi-threaded encoding (passes \fB\-mt\fR to \fBcwebp\fR).
+.TP
+.B \-\-cwoption \fIOPT\fR
+Pass arbitrary \fBOPT\fR (e.g. \fB\-af\fR) directly to \fBcwebp\fR.
+.TP
+.B \-\-parallel , \-P
+Process multiple directories in parallel.
+.SH EXAMPLES
+.TP
+Convert current directory at default quality:
+.RS
+\fBwebpCreate\fR
+.RE
+.TP
+Convert two folders, 75% quality, max side 1200px:
+.RS
+\fBwebpCreate \-q 75 \-\-maxd 1200 ~/Pics ~/MorePics\fR
+.RE
+.TP
+Process three folders in parallel, lossless, multi-threaded:
+.RS
+\fBwebpCreate \-\-parallel \-\-lossless \-\-mt dir1 dir2 dir3\fR
+.RE
+.SH SEE ALSO
+.BR cwebp (1),
+.BR sips (1).
