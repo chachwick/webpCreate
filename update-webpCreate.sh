@@ -10,7 +10,8 @@ echo "🔄 Fetching latest update-webpCreate…"
 curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/update-webpCreate.sh \
   -o "$HOME/scripts/update-webpCreate"
 chmod +x "$HOME/scripts/update-webpCreate"
-echo ""
+
+echo
 echo "✅ Update complete!"
-echo "👉 Run \`source ~/.zshrc\` to load your new PATH and alias."
-echo "👉 Then try \`webpCreate --help\`."
+echo '👉 Run `source ~/.zshrc` to load your new PATH and alias.'
+echo '👉 Then try `webpCreate --help`.'
