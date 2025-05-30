@@ -220,10 +220,32 @@ process_directory(){
   done
 
   dirs_processed+=("$dir")
+
+  # … after tallying SUM_JPG, SUM_PNG, SUM_WEBP …
+  if [[ -n $PARALLEL_TMPDIR ]]; then
+    orig=$(( SUM_JPG[$dir] + SUM_PNG[$dir] ))
+    webp=${SUM_WEBP[$dir]}
+    saved=$(( orig - webp ))
+    pct=$((( saved * 1000 / orig + 5 ) / 10 ))
+    echo "${dir}|${orig}|${webp}|${saved}|${pct}" > "$PARALLEL_TMPDIR/$(basename "$dir").stats"
+  else
+    dirs_processed+=("$dir")
+  fi
+
   cd - &>/dev/null
 }
 
-# ─── Main Loop: Parallel or Sequential ────────────────────────────────────────
+#
+# ─── Prepare for Parallel Stats Collection ───────────────────────────────────────
+#
+if [[ $do_parallel = true ]]; then
+  PARALLEL_TMPDIR=$(mktemp -d /tmp/webpCreate.XXXX)
+  echo "🛠  Parallel mode enabled; writing stats to $PARALLEL_TMPDIR"
+fi
+
+#
+# ─── Main Loop: Parallel or Sequential ──────────────────────────────────────────
+#
 if [[ $do_parallel = true ]]; then
   for d in "${dirs[@]}"; do
     process_directory "$d" &
@@ -235,17 +257,33 @@ else
   done
 fi
 
-# ─── Final Summary ─────────────────────────────────────────────────────────────
-echo; echo "# Final Conversion Summary"
-for dir in "${dirs_processed[@]}"; do
-  orig=$(( SUM_JPG[$dir] + SUM_PNG[$dir] ))
-  webp=${SUM_WEBP[$dir]}
-  saved=$(( orig - webp ))
-  pct=$((( saved * 1000 / orig + 5 ) / 10 ))
+#
+# ─── Final Summary ──────────────────────────────────────────────────────────────
+#
+if [[ -n $PARALLEL_TMPDIR ]]; then
   echo
-  echo "• Directory: $dir"
-  echo "   - Original JPG/JPEG size: $(human_size ${SUM_JPG[$dir]})"
-  echo "   - Original PNG size:      $(human_size ${SUM_PNG[$dir]})"
-  echo "   - WebP output size:       $(human_size $webp)"
-  echo "   - Savings:                $(human_size $saved) ($pct% reduction)"
-done
+  echo "# Final Conversion Summary"
+  for stats in "$PARALLEL_TMPDIR"/*.stats; do
+    IFS='|' read -r dir orig webp saved pct < "$stats"
+    echo
+    echo "• Directory: $dir"
+    echo "   - Original size:  $(human_size $orig)"
+    echo "   - WebP size:      $(human_size $webp)"
+    echo "   - Savings:        $(human_size $saved) ($pct% reduction)"
+  done
+  rm -rf "$PARALLEL_TMPDIR"
+else
+  echo
+  echo "# Final Conversion Summary"
+  for dir in "${dirs_processed[@]}"; do
+    orig=$(( SUM_JPG[$dir] + SUM_PNG[$dir] ))
+    webp=${SUM_WEBP[$dir]}
+    saved=$(( orig - webp ))
+    pct=$((( saved * 1000 / orig + 5 ) / 10 ))
+    echo
+    echo "• Directory: $dir"
+    echo "   - Original size:  $(human_size $orig)"
+    echo "   - WebP size:      $(human_size $webp)"
+    echo "   - Savings:        $(human_size $saved) ($pct% reduction)"
+  done
+fi
