@@ -1,5 +1,3 @@
-Here’s your README with all fences fixed and balanced, and the dependency block correctly closed:
-
 ````markdown
 # webpCreate
 
