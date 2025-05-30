@@ -1,60 +1,49 @@
 #!/usr/bin/env bash
 set -e
 
-# install-webpCreate.sh
-# Bootstrap installer for webpCreate script and dependencies
-
-# 1. Update Homebrew
 echo "🔧 Updating Homebrew..."
 brew update
 
-# 2. Install or upgrade WebP (cwebp) and ffmpeg for HEIC support
-echo "📦 Ensuring required packages are installed..."
+echo "📦 Installing or upgrading webp (cwebp)..."
 if brew list webp &>/dev/null; then
   brew upgrade webp
 else
   brew install webp
 fi
 
+echo "📦 Installing or upgrading ffmpeg (optional HEIC support)..."
 if brew list ffmpeg &>/dev/null; then
   brew upgrade ffmpeg
 else
   brew install ffmpeg
 fi
 
-# 3. Create scripts directory
-echo "📁 Creating ~/scripts directory..."
+echo "📁 Ensuring ~/scripts exists..."
 mkdir -p "$HOME/scripts"
 
-# 4. Download webpCreate script
-echo "⬇️  Downloading webpCreate..."
+echo "⬇️  Downloading webpCreate…"
 curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/webpCreate \
   -o "$HOME/scripts/webpCreate"
-
-# 5. Make it executable
-echo "🔐 Making webpCreate executable..."
 chmod +x "$HOME/scripts/webpCreate"
 
-# 6. Ensure PATH includes scripts directory
-RCFILE="$HOME/.zshrc"
-if ! grep -q 'export PATH="$HOME/scripts:$PATH"' "$RCFILE"; then
-  echo 'export PATH="$HOME/scripts:$PATH"' >> "$RCFILE"
-  echo "🛠 Added ~/scripts to PATH in $RCFILE"
+echo "⬇️  Downloading update-webpCreate…"
+curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/update-webpCreate.sh \
+  -o "$HOME/scripts/update-webpCreate"
+chmod +x "$HOME/scripts/update-webpCreate"
+
+# Add scripts dir to PATH if not already present
+if ! grep -q 'export PATH="\$HOME/scripts:\$PATH"' "$HOME/.zshrc"; then
+  echo 'export PATH="$HOME/scripts:$PATH"' >> "$HOME/.zshrc"
+  echo "🛠  Added ~/scripts to your PATH in ~/.zshrc"
 fi
 
-# 7. Final message
-cat << EOF
-✅ Installation complete!
+# Add a convenient alias for updates
+if ! grep -q 'alias update-webpCreate=' "$HOME/.zshrc"; then
+  echo 'alias update-webpCreate="$HOME/scripts/update-webpCreate"' >> "$HOME/.zshrc"
+  echo "🛠  Added alias \`update-webpCreate\` to ~/.zshrc"
+fi
 
-Next steps:
-  1. Reload your shell:
-       source ~/.zshrc
-  2. Verify installation:
-       webpCreate -?                # Show help and usage
-  3. Run webpCreate in any image folder:
-       cd /path/to/images
-       webpCreate [options]
-
-For more details, visit:
-  https://github.com/chachwick/webpCreate
-EOF
+echo ""
+echo "✅ Installation complete!"
+echo "👉 Run \`source ~/.zshrc\` to load your new PATH and alias."
+echo "👉 Then try \`webpCreate --help\` or \`update-webpCreate\`."
