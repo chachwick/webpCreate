@@ -2,7 +2,7 @@
 setopt null_glob
 
 # --- Default Configuration ---
-QUALITY=80         # default quality, use --cwoption "-q <n>" to override
+QUALITY=80         # default quality, use --cwoption to override
 askScale=true
 maxDim=0
 updateOnly=false
@@ -11,7 +11,7 @@ CWOPTS=()          # additional cwebp options
 # --- Parse Command-Line Options ---
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -\?|--help|-h)
+    -h|--help)
       cat << 'EOF'
 Usage: webpCreate [options]
 
@@ -20,27 +20,19 @@ Options:
   --maxd <pixels>        Max dimension for longest side (skip resize prompt)
   --lossless             Add cwebp -lossless flag
   --cwoption <opt>       Pass custom option to cwebp (e.g. -af or "-z 9")
-  -?, -h, --help         Show this help message and exit
+  -h, --help             Show this help message and exit
 
 Examples:
   webpCreate --maxd 1200 --cwoption "-q 75"    # resize and quality
   webpCreate --lossless --cwoption "-af"       # lossless with auto-filter
-  webpCreate -?                                # show this help
-
-webpCreate batch-converts JPEG, JPG, PNG, and HEIC images to WebP, optimized for web delivery, and organizes both the originals and the newly created images.
-
-Why WebP?
-WebP is a modern image format that provides superior compression for images on the web,
-reducing file size and improving page load performance without sacrificing visual quality.
-It supports both lossy and lossless compression.
+  webpCreate -h                                 # show this help
 
 For full cwebp options, see:
   • WebP docs: https://developers.google.com/speed/webp/docs/cwebp
   • Manual: man cwebp
 
-If you’re missing dependencies, run:
-  brew install webp ffmpeg  # for cwebp and optional HEIC support
-or use the installer script:
+If missing dependencies, run:
+  brew install webp ffmpeg  # for cwebp and HEIC support
   bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)
 EOF
       exit 0
@@ -62,7 +54,7 @@ EOF
         echo "❌ --cwoption requires an argument (e.g. -af)"; exit 1
       fi;;
     *)
-      echo "❌ Unknown option: $1"; echo "Run with -? or --help for usage."; exit 1;;
+      echo "❌ Unknown option: $1"; echo "Run with --help or -h for usage."; exit 1;;
   esac
 done
 
@@ -70,8 +62,7 @@ done
 if $updateOnly; then
   echo "🔄 Updating webpCreate to latest version from GitHub..."
   mkdir -p "$HOME/scripts"
-  curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/webpCreate \
-    -o "$HOME/scripts/webpCreate"
+  curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/webpCreate -o "$HOME/scripts/webpCreate"
   chmod +x "$HOME/scripts/webpCreate"
   source "$HOME/.zshrc" 2>/dev/null || true
   echo "✅ webpCreate updated."
@@ -81,94 +72,107 @@ fi
 # --- Description ---
 # webpCreate: Batch-converts images to WebP, optimizes for web delivery, and organizes originals.
 # Why WebP?
-#   WebP is a modern image format that provides superior compression for images on the web,
-#   reducing file size and improving page load performance without sacrificing visual quality.
-#   It supports both lossy and lossless compression.
-#
+#   WebP is a modern image format with superior compression, reducing file sizes
+#   for faster web page loads with no significant quality loss. It supports
+#   lossy and lossless modes.
 # What this script does:
-#   1. Detects and converts HEIC files to JPEG, organizing originals into a HEIC/ folder.
-#   2. Converts JPG, JPEG, and PNG files to WebP, optionally resizing the longest side.
-#   3. Handles filename conflicts with overwrite, increment, or skip prompts.
-#   4. Moves original images into JPG/ and PNG/ folders and outputs WebP files to WEBP/.
-#
-# Usage:
-#   webpCreate [options]
-#   Options include scaling (--maxd), quality and filter flags (--cwoption), lossless mode (--lossless),
-#   and an updater (--update).  See -? or --help for full details.
+#   1. Converts HEIC to JPEG (moves HEIC originals to HEIC/)
+#   2. Converts JPG/JPEG/PNG to WebP (optional resize)
+#   3. Handles filename conflicts (overwrite/increment/skip)
+#   4. Organizes originals into JPG/ and PNG/ folders; outputs WebP to WEBP/
+# Usage: webpCreate [options]
 
 # --- Dependency Checks ---
 echo "🧩 Checking dependencies..."
-# cwebp
 if ! command -v cwebp &> /dev/null; then
-  echo "❌ cwebp not found. Install with: brew install webp"
+  echo "❌ cwebp not found. Install: brew install webp"
   echo "   or run installer: bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)"
   exit 1
 fi
-# sips (macOS only)
 if ! command -v sips &> /dev/null; then
-  echo "❌ sips not found. sips is built into macOS."
-  echo "   Please run on macOS or install necessary image tools."
+  echo "❌ sips not found (macOS only)."
   exit 1
 fi
-# ffmpeg optional for some workflows
 if ! command -v ffmpeg &> /dev/null; then
-  echo "⚠️  ffmpeg not found. For HEIC support, install with: brew install ffmpeg"
+  echo "⚠️  ffmpeg not found. For HEIC support: brew install ffmpeg"
 fi
-
-echo "✅ All required tools are available."
 
 # --- Start Processing ---
 echo "🛠  Running webpCreate in: $(pwd)"
 
-# --- Early Ghost File Detection ---
+# Early ghost file detection
 jpg_patterns=( *.jpg(N) *.JPG(N) *.jpeg(N) *.JPEG(N) )
 png_patterns=( *.png(N) *.PNG(N) )
 heic_patterns=( *.heic(N) *.HEIC(N) )
 all_patterns=( "${jpg_patterns[@]}" "${png_patterns[@]}" "${heic_patterns[@]}" )
-
 ghosts=()
 for f in "${all_patterns[@]}"; do
   [[ -e $f && ! -s $f ]] && ghosts+=("$f")
 done
-
 if (( ${#ghosts[@]} > 0 )); then
-  echo "⚠️  Detected ${#ghosts[@]} ghost (not downloaded) file(s):"
+  echo "⚠️ Detected ${#ghosts[@]} ghost files:"
   printf ' - %s\n' "${ghosts[@]}"
-  echo ""
-  echo "What would you like to do?"
-  echo "  [1] Continue with downloaded files only"
-  echo "  [2] Quit and sync these files first"
-  echo "  [3] Quit"
-  echo -n "Enter choice [1/2/3]: "
-  read choice
-  case $choice in
-    1) echo "✅ Proceeding...";;
-    2) echo "👋 Please download those files then re-run."; exit 0;;
-    *) echo "👋 Exiting."; exit 0;;
-  esac
+  echo "1) Continue with downloaded files only"
+  echo "2) Quit and sync files first"
+  echo -n "Choice [1/2]: "; read choice
+  [[ $choice == 1 ]] || { echo "Exiting."; exit 0; }
 fi
 
-# --- Determine Scaling ---
+# Determine scaling
 if $askScale; then
-  echo -n "Would you like to resize images? (y/n): "
-  read scaleChoice
+  echo -n "Resize images? (y/n): "; read scaleChoice
   if [[ "$scaleChoice" =~ ^[Yy] ]]; then
-    echo -n "Enter max dimension (px) for longest side: "
-    read maxDim
-    if ! [[ "$maxDim" =~ ^[0-9]+$ ]]; then
-      echo "❌ Invalid number: $maxDim"; exit 1
-    fi
-    echo "♻️  Scaling to ${maxDim}px on longest side."
+    echo -n "Max dimension (px): "; read maxDim
+    [[ "$maxDim" =~ ^[0-9]+$ ]] || { echo "Invalid number."; exit 1; }
+    echo "Scaling to ${maxDim}px."
   else
-    maxDim=0
-    echo "ℹ️ No resizing will be applied."
+    maxDim=0; echo "No resizing."
   fi
 else
-  if (( maxDim > 0 )); then
-    echo "♻️  Auto-scaling to ${maxDim}px on longest side."
-  else
-    echo "ℹ️ No resizing as per options."
-  fi
+  (( maxDim > 0 )) && echo "Auto-scaling to ${maxDim}px." || echo "No resizing."
 fi
 
-# ... rest of script unchanged ...
+# Convert HEIC to JPEG
+heic_files=( "${heic_patterns[@]}" )
+if (( ${#heic_files[@]} )); then
+  mkdir -p HEIC JPG
+  echo "Converting HEIC to JPEG..."
+  for f in "${heic_files[@]}"; do
+    [[ -f $f && -s $f ]] || continue
+    sips -s format jpeg "$f" --out "${f%.*}.jpg" >/dev/null
+    mv "$f" HEIC/
+  done
+fi
+
+# Initialize counters
+jpg_count=0; png_count=0; webp_count=0
+jpg_size=0; png_size=0; webp_size=0
+human_size(){ printf "%d.%02d MB" $(( $1/1024/1024 )) $((( $1/1024)%1024*100/1024)); }
+ask_file_action(){ while true; do
+  echo "WEBP/$1 exists. (o)verwrite/(i)ncrement/(s)kip?"; read -sk1 c; echo
+  case $c in [oO]) return 0;; [iI]) return 1;; [sS]) return 2;; *) echo "Choose o,i or s.";; esac
+done }
+convert_and_handle_conflict(){ local in=$1 base=${in%.*} suffix=$([[ $maxDim -gt 0 ]]&&echo -$maxDim) out=${base}${suffix}.webp
+  local rf=(); if (( maxDim )); then parse_dims; rf=("-resize" "$newW" "$newH"); fi
+  mkdir -p WEBP
+  [[ -e WEBP/$out ]] && ask_file_action "$out" && action=$? && { ((action==1))&&increment_out; ((action!=2))&&cwebp_run; } || cwebp_run && mv "$out" WEBP/
+}
+parse_dims(){ w=$(sips -g pixelWidth "$in"|awk '/pixelWidth/{print$2}'); h=$(sips -g pixelHeight "$in"|awk '/pixelHeight/{print$2}');((w>=h))&&newW=$maxDim&&newH=0||newW=0&&newH=$maxDim; }
+increment_out(){ n=1; while [[ -e WEBP/${base}${suffix}_$n.webp ]]; do ((n++)); done; out=${base}${suffix}_$n.webp; cwebp_run; mv "$out" WEBP/; }
+cwebp_run(){ cwebp -q $QUALITY "${CWOPTS[@]}" "${rf[@]}" "$in" -o "$out"; }
+
+# Build file lists
+ojg=( $(printf "%s\n" "${jpg_patterns[@]}"|while read f;do [[ -f $f && -s $f ]]&&echo $f;done) )
+png=( $(printf "%s\n" "${png_patterns[@]}"|while read f;do [[ -f $f && -s $f ]]&&echo $f;done) )
+
+# Process JPGs
+(( ${#ojg[@]} ))&&mkdir -p JPG&&for file in "${ojg[@]}";do sz=$(stat -f%z "$file"); echo Converting $file; convert_and_handle_conflict "$file"&&mv "$file" JPG/&&((jpg_count++,jpg_size+=sz)); done
+# Process PNGs
+(( ${#png[@]} ))&&mkdir -p PNG&&for file in "${png[@]}";do sz=$(stat -f%z "$file"); echo Converting $file; convert_and_handle_conflict "$file"&&mv "$file" PNG/&&((png_count++,png_size+=sz)); done
+
+# Count WEBP
+echo; for w in WEBP/*.webp(N);do((webp_count++,webp_size+=$(stat -f%z "$w")));done
+
+# Summary
+tot=$((jpg_size+png_size)); saved=$((tot-webp_size));
+echo "\n✅ Summary:"; ((jpg_count))&&echo " - JPGs: $jpg_count → $(human_size $jpg_size)"; ((png_count))&&echo " - PNGs: $png_count → $(human_size $png_size)"; ((webp_count))&&echo " - WEBP: $webp_count → $(human_size $webp_size)"; ((tot>0&&webp_size>0))&&echo " - Savings: $(human_size $saved) ($(printf "%.1f%%" $(echo "$saved/$tot*100"|bc -l)))"
