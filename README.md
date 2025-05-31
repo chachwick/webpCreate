@@ -27,16 +27,13 @@ Batch-convert images to WebP with organization, optional resizing, multi-threadi
 Ensure you have:
 
 - **macOS** (10.15 or later)  
-
 - **Zsh** (relies on Zsh globbing and `read -q`)  
-
 - **Homebrew** for installing the rest:
+  `
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
 
-  ```bash
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  ```
+The installation script (see below will use Homebrew to install the following tools)
 
-```
 - **cwebp** (from the `webp` package)
   - Docs: https://developers.google.com/speed/webp/docs/cwebp
   - Install: `brew install webp`
