@@ -4,25 +4,44 @@ setopt null_glob
 # ─── Help & Description ──────────────────────────────────────────────────────────
 show_help() {
   cat <<-EOF
-webpCreate: batch-convert images to WebP with organization & stats.
-Usage: webpCreate [options] [dir1 dir2 ...]
+webpCreate: batch-convert images to WebP with concise progress and stats.
+
+What it does:
+  • Converts JPEG, PNG (case‐insensitive), and HEIC (via sips) to WebP  
+  • Organizes originals into JPG/, PNG/, HEIC/ and outputs into WEBP/  
+  • Handles name conflicts (overwrite/increment/skip)  
+  • Optionally resizes longest side ≤ max dimension  
+  • Supports quality tuning, lossless, multi‐thread, arbitrary cwebp flags, parallel dirs  
+  • Reports per-directory file counts, sizes, total savings, and percentage reduction
+
+Usage:
+  webpCreate [options] [dir1 dir2 ...]
+  If no directories are given, defaults to the current directory.
+
+Installation & Updates:
+  • Initial install:
+      bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)  
+  • For updates:
+      update-webpCreate
+
 Options:
-  -h, --help        Show this help and exit
-  -q, --quality Q   Set cwebp quality (default 80)
-  --maxd N          Resize longest side to ≤ N px (non-interactive)
-  --lossless        cwebp -lossless
-  --mt              cwebp -mt (multi-thread)
-  --cwoption OPT    Pass OPT to cwebp
-  --parallel, -P    Process directories in parallel
+  -h, --help            Show this help and exit
+  -q, --quality Q       Set cwebp quality (0–100; default 80)
+  --maxd N              Resize longest side to ≤ N px (skips prompt)
+  --lossless            Use cwebp -lossless
+  --mt, --multithread   Enable cwebp -mt (multi‐threaded)
+  --cwoption OPT        Pass arbitrary OPT (e.g. "-af") to cwebp
+  --parallel, -P        Process multiple directories in parallel
 
-For full reference, see the manual:  
-  man webpCreate
-
+Examples:
+  webpCreate .
+  webpCreate -q 75 --maxd 1200 ~/Pictures ~/Downloads
+  webpCreate --parallel --lossless --mt dirA dirB
 EOF
 }
 
 # ─── Flag Parsing ───────────────────────────────────────────────────────────────
-cwebp_opts=()
+cwebp_opts=(-quiet)   # start with -quiet to suppress verbose output
 do_parallel=false
 dirs=()
 quality=""
@@ -31,19 +50,18 @@ maxd_flag=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     -h|--help) show_help; exit 0;;
-    --lossless)           cwebp_opts+=(-lossless); shift;;
-    --mt|--multithread)   cwebp_opts+=(-mt);        shift;;
-    --cwoption)           shift; cwebp_opts+=("$1"); shift;;
-    -q|--quality)         shift; quality=$1; cwebp_opts+=(-q $quality); shift;;
-    --maxd)               shift; maxDim=$1; do_resize=true; maxd_flag="yes"; shift;;
-    --parallel|-P)        do_parallel=true;        shift;;
+    -q|--quality)       shift; quality=$1; cwebp_opts+=(-q $quality); shift;;
+    --maxd)             shift; maxDim=$1; do_resize=true; maxd_flag="yes"; shift;;
+    --lossless)         cwebp_opts+=(-lossless); shift;;
+    --mt|--multithread) cwebp_opts+=(-mt); shift;;
+    --cwoption)         shift; cwebp_opts+=("$1"); shift;;
+    --parallel|-P)      do_parallel=true; shift;;
     --) shift; break;;
     -*) echo "Unknown option: $1"; exit 1;;
     *) dirs+=("$1"); shift;;
   esac
 done
 
-# Default to cwd if no dirs given
 (( ${#dirs[@]} == 0 )) && dirs=(".")
 
 # ─── Resize Prompt ─────────────────────────────────────────────────────────────
@@ -58,7 +76,6 @@ if [[ -z $maxd_flag ]]; then
     do_resize=false
   fi
 else
-  # --maxd provided, skip prompt
   do_resize=true
 fi
 
@@ -73,10 +90,10 @@ for cmd in cwebp sips; do
 done
 
 # ─── Summary Data Containers ───────────────────────────────────────────────────
-typeset -Ag SUM_JPG SUM_PNG SUM_WEBP
+typeset -Ag SUM_JPG SUM_PNG SUM_WEBP SUM_COUNT
 dirs_processed=()
 
-# ─── Helpers ───────────────────────────────────────────────────────────────────
+# ─── Utilities ─────────────────────────────────────────────────────────────────
 human_size(){
   local b=$1
   printf "%d.%02d MB" $((b/1024/1024)) $(((b/1024)%1024*100/1024))
@@ -102,7 +119,7 @@ convert_and_handle_conflict(){
   suffix=$([ "$do_resize" = true ] && echo "-$maxDim" || echo "")
   out="${base}${suffix}.webp"
 
-  # Determine resize params
+  # Determine resize params, if needed
   if $do_resize; then
     w=$(sips -g pixelWidth "$input"  | awk '/pixelWidth/  {print $2}')
     h=$(sips -g pixelHeight "$input" | awk '/pixelHeight/ {print $2}')
@@ -111,9 +128,11 @@ convert_and_handle_conflict(){
 
   mkdir -p WEBP
   if [[ -e WEBP/$out ]]; then
-    ask_conflict "$out"; action=$?
-    if   ((action==0)); then : # overwrite
-    elif ((action==1)); then
+    ask_conflict "$out"
+    action=$?
+    if (( action == 0 )); then
+      : # overwrite
+    elif (( action == 1 )); then
       local n=1
       while [[ -e WEBP/${base}${suffix}_$n.webp ]]; do ((n++)); done
       out="${base}${suffix}_$n.webp"
@@ -122,14 +141,22 @@ convert_and_handle_conflict(){
     fi
   fi
 
+  # Run cwebp with -quiet; append resize flags if requested
   if $do_resize; then
-    cwebp "${cwebp_opts[@]}" -resize $newW $newH "$input" -o "$out"
+    cwebp "${cwebp_opts[@]}" -resize $newW $newH "$input" -o "WEBP/$out"
   else
-    cwebp "${cwebp_opts[@]}" "$input" -o "$out"
+    cwebp "${cwebp_opts[@]}" "$input" -o "WEBP/$out"
   fi
 
-  mv "$out" WEBP/ && return 0
-  return 1
+  # Print concise per-file info: name, before→after sizes
+  local in_size out_size
+  in_size=$(stat -f%z "$input")
+  out_size=$(stat -f%z "WEBP/$out")
+  printf "▶ %s: %s → %s\n" \
+    "$input" "$(human_size $in_size)" "$(human_size $out_size)"
+
+  mv "$input" "$processed_dir"/
+  return 0
 }
 
 # ─── Directory Processing Function ─────────────────────────────────────────────
@@ -137,6 +164,8 @@ process_directory(){
   local dir=$1 jpgs pngs heics ghost f size
   echo "── Processing: $dir ─────────────────────────────────────────"
   cd "$dir" || { echo "❌ Cannot cd into $dir"; return; }
+
+  processed_dir=""  # will be set below
 
   # Ghost-file check
   ghosts=()
@@ -155,76 +184,60 @@ process_directory(){
   if (( ${#heics[@]} )); then
     mkdir -p HEIC
     for f in "${heics[@]}"; do
-      echo "➡️  Converting HEIC → JPEG: $f"
       sips -s format jpeg "$f" --out "${f%.*}.jpg"
       mv "$f" HEIC/
     done
   fi
 
-  # Gather lists & initialize sums
+  # Initialize counts & sums
   jpgs=( *.jpg(N) *.JPG(N) *.jpeg(N) *.JPEG(N) )
   pngs=( *.png(N) *.PNG(N) )
-  SUM_JPG[$dir]=0; SUM_PNG[$dir]=0; SUM_WEBP[$dir]=0
+  SUM_JPG[$dir]=0; SUM_PNG[$dir]=0; SUM_WEBP[$dir]=0; SUM_COUNT[$dir]=0
+
+  # Create processed directories
+  mkdir -p JPG PNG
+  processed_dir="JPG"
 
   # Convert JPG/JPEG
-  if (( ${#jpgs[@]} )); then mkdir -p JPG; fi
   for f in "${jpgs[@]}"; do
     [[ -f $f ]] || continue
-    size=$(stat -f%z "$f")
-    echo "➡️ Converting $f"
+    SUM_COUNT[$dir]=$(( SUM_COUNT[$dir] + 1 ))
+    SUM_JPG[$dir]=$(( SUM_JPG[$dir] + $(stat -f%z "$f") ))
     if convert_and_handle_conflict "$f"; then
-      mv "$f" JPG/
-      (( SUM_JPG[$dir]+=$size ))
+      mv "WEBP/${f%.*}${suffix}.webp" WEBP/
     fi
   done
 
   # Convert PNG
-  if (( ${#pngs[@]} )); then mkdir -p PNG; fi
+  processed_dir="PNG"
   for f in "${pngs[@]}"; do
     [[ -f $f ]] || continue
-    size=$(stat -f%z "$f")
-    echo "➡️ Converting $f"
+    SUM_COUNT[$dir]=$(( SUM_COUNT[$dir] + 1 ))
+    SUM_PNG[$dir]=$(( SUM_PNG[$dir] + $(stat -f%z "$f") ))
     if convert_and_handle_conflict "$f"; then
-      mv "$f" PNG/
-      (( SUM_PNG[$dir]+=$size ))
+      mv "WEBP/${f%.*}${suffix}.webp" WEBP/
     fi
   done
 
-  # Tally WEBP
+  # Tally WEBP sizes
   for w in WEBP/*.webp(N); do
-    (( SUM_WEBP[$dir] += $(stat -f%z "$w") ))
+    SUM_WEBP[$dir]=$(( SUM_WEBP[$dir] + $(stat -f%z "$w") ))
   done
 
   dirs_processed+=("$dir")
-
-  # … after tallying SUM_JPG, SUM_PNG, SUM_WEBP …
-  if [[ -n $PARALLEL_TMPDIR ]]; then
-    orig=$(( SUM_JPG[$dir] + SUM_PNG[$dir] ))
-    webp=${SUM_WEBP[$dir]}
-    saved=$(( orig - webp ))
-    pct=$((( saved * 1000 / orig + 5 ) / 10 ))
-    echo "${dir}|${orig}|${webp}|${saved}|${pct}" > "$PARALLEL_TMPDIR/$(basename "$dir").stats"
-  else
-    dirs_processed+=("$dir")
-  fi
-
   cd - &>/dev/null
 }
 
-#
-# ─── Prepare for Parallel Stats Collection ───────────────────────────────────────
-#
+# ─── Prepare for Parallel Stats Collection ─────────────────────────────────────
 if [[ $do_parallel = true ]]; then
   PARALLEL_TMPDIR=$(mktemp -d /tmp/webpCreate.XXXX)
-  echo "🛠  Parallel mode enabled; writing stats to $PARALLEL_TMPDIR"
+  echo "🛠  Parallel mode: writing per-dir stats to $PARALLEL_TMPDIR"
 fi
 
-#
-# ─── Main Loop: Parallel or Sequential ──────────────────────────────────────────
-#
+# ─── Main Loop: Parallel or Sequential ────────────────────────────────────────
 if [[ $do_parallel = true ]]; then
   for d in "${dirs[@]}"; do
-    process_directory "$d" &
+    process_directory "$d" >"$PARALLEL_TMPDIR/$(basename "$d").log" 2>&1 &
   done
   wait
 else
@@ -233,33 +246,38 @@ else
   done
 fi
 
-#
-# ─── Final Summary ──────────────────────────────────────────────────────────────
-#
+# ─── Final Summary ─────────────────────────────────────────────────────────────
+echo; echo "# Final Conversion Summary"
+
 if [[ -n $PARALLEL_TMPDIR ]]; then
-  echo
-  echo "# Final Conversion Summary"
-  for stats in "$PARALLEL_TMPDIR"/*.stats; do
-    IFS='|' read -r dir orig webp saved pct < "$stats"
-    echo
-    echo "• Directory: $dir"
-    echo "   - Original size:  $(human_size $orig)"
-    echo "   - WebP size:      $(human_size $webp)"
-    echo "   - Savings:        $(human_size $saved) ($pct% reduction)"
-  done
-  rm -rf "$PARALLEL_TMPDIR"
-else
-  echo
-  echo "# Final Conversion Summary"
-  for dir in "${dirs_processed[@]}"; do
+  for stats in "$PARALLEL_TMPDIR"/*.log; do
+    dir=$(basename "${stats%.log}")
+    # Read the accumulated sums:
     orig=$(( SUM_JPG[$dir] + SUM_PNG[$dir] ))
     webp=${SUM_WEBP[$dir]}
+    count=${SUM_COUNT[$dir]}
     saved=$(( orig - webp ))
     pct=$((( saved * 1000 / orig + 5 ) / 10 ))
     echo
     echo "• Directory: $dir"
-    echo "   - Original size:  $(human_size $orig)"
-    echo "   - WebP size:      $(human_size $webp)"
-    echo "   - Savings:        $(human_size $saved) ($pct% reduction)"
+    echo "   - Images processed:    $count"
+    echo "   - Original total size: $(human_size $orig)"
+    echo "   - WebP total size:     $(human_size $webp)"
+    echo "   - Savings:             $(human_size $saved) ($pct% reduction)"
+  done
+  rm -rf "$PARALLEL_TMPDIR"
+else
+  for dir in "${dirs_processed[@]}"; do
+    orig=$(( SUM_JPG[$dir] + SUM_PNG[$dir] ))
+    webp=${SUM_WEBP[$dir]}
+    count=${SUM_COUNT[$dir]}
+    saved=$(( orig - webp ))
+    pct=$((( saved * 1000 / orig + 5 ) / 10 ))
+    echo
+    echo "• Directory: $dir"
+    echo "   - Images processed:    $count"
+    echo "   - Original total size: $(human_size $orig)"
+    echo "   - WebP total size:     $(human_size $webp)"
+    echo "   - Savings:             $(human_size $saved) ($pct% reduction)"
   done
 fi
