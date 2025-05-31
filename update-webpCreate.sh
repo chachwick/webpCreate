@@ -35,14 +35,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 download_and_replace() {
-  local url=$1 dst=$2
-
-  # Download into a temp file next to the destination
-  local tmp="${dst}.new"
+  local url=$1 dst=$2 tmp
+  tmp="$(mktemp "${dst}.XXXXXX")"
   curl -fsSL "$url" -o "$tmp"
   chmod +x "$tmp"
   mv "$tmp" "$dst"
 }
+
+# Ensure ~/scripts exists and is writable
+mkdir -p "$HOME/scripts"
+if [[ ! -w "$HOME/scripts" ]]; then
+  echo "❌ Cannot write to $HOME/scripts. Check permissions." >&2
+  exit 1
+fi
 
 if [[ $QUIET == false ]]; then
   echo "🔄 Fetching latest webpCreate…"
@@ -65,8 +70,7 @@ mkdir -p "$MAN_DIR"
 if [[ $QUIET == false ]]; then
   echo "📄 Updating man page…"
 fi
-
-local_man="${MAN_DIR}/webpCreate.1.new"
+local_man="$(mktemp "${MAN_DIR}/webpCreate.XXX")"
 curl -fsSL "https://raw.githubusercontent.com/chachwick/webpCreate/main/man/webpCreate.1" \
   -o "$local_man"
 chmod 644 "$local_man"
@@ -76,7 +80,7 @@ if [[ $QUIET == false ]]; then
   echo ""
   echo "✅ Update complete!"
   echo "👉 Run \`source ~/.zshrc\` if you haven’t already."
-  echo "👉 Then try \`man webpCreate\` or \`webpCreate --help\`."
+  echo "👉 Then try \`man webpCreate\` and \`webpCreate --help\`."
   echo "👉 If you need to update dependencies as well, run:"
   echo "   bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)"
 fi
