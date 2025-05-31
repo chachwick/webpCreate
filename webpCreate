@@ -186,32 +186,40 @@ process_directory(){
   # Initialize sums
   orig_size=0; webp_size=0
 
-  mkdir -p JPG PNG
+  # Convert JPG/JPEG only if present
+  local jpgs=( *.jpg(N) *.JPG(N) *.jpeg(N) *.JPEG(N) )
+  if (( ${#jpgs[@]} )); then
+    mkdir -p JPG
+    for f in "${jpgs[@]}"; do
+      [[ -f $f ]] || continue
+      (( count++ ))
+      orig_size=$(( orig_size + $(stat -f%z "$f") ))
+      if convert_and_handle_conflict "$f"; then
+        mv "$f" JPG/
+      fi
+    done
+  fi
 
-  # Convert JPG/JPEG
-  for f in *.jpg(N) *.JPG(N) *.jpeg(N) *.JPEG(N); do
-    [[ -f $f ]] || continue
-    (( count++ ))
-    orig_size=$(( orig_size + $(stat -f%z "$f") ))
-    if convert_and_handle_conflict "$f"; then
-      mv "$f" JPG/
-    fi
-  done
+  # Convert PNG only if present
+  local pngs=( *.png(N) *.PNG(N) )
+  if (( ${#pngs[@]} )); then
+    mkdir -p PNG
+    for f in "${pngs[@]}"; do
+      [[ -f $f ]] || continue
+      (( count++ ))
+      orig_size=$(( orig_size + $(stat -f%z "$f") ))
+      if convert_and_handle_conflict "$f"; then
+        mv "$f" PNG/
+      fi
+    done
+  fi
 
-  # Convert PNG
-  for f in *.png(N) *.PNG(N); do
-    [[ -f $f ]] || continue
-    (( count++ ))
-    orig_size=$(( orig_size + $(stat -f%z "$f") ))
-    if convert_and_handle_conflict "$f"; then
-      mv "$f" PNG/
-    fi
-  done
-
-  # Tally WEBP sizes
-  for w in WEBP/*.webp(N); do
-    webp_size=$(( webp_size + $(stat -f%z "$w") ))
-  done
+  # Tally WEBP sizes only if WEBP folder exists
+  if [[ -d WEBP ]]; then
+    for w in WEBP/*.webp(N); do
+      webp_size=$(( webp_size + $(stat -f%z "$w") ))
+    done
+  fi
 
   # In parallel mode, write a .stats file; otherwise collect in arrays
   if [[ -n $PARALLEL_TMPDIR ]]; then
@@ -285,4 +293,3 @@ else
     echo "   - Savings:             $(human_size $saved) ($pct% reduction)"
   done
 fi
- 
