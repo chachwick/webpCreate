@@ -1,5 +1,9 @@
 #!/usr/bin/env zsh
+# webpCreate version: 2025-05-30-009
 setopt null_glob
+
+# …rest of script…
+
 
 # ─── Help & Description ──────────────────────────────────────────────────────────
 show_help() {
