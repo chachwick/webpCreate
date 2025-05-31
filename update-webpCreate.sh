@@ -23,5 +23,5 @@ echo ""
 echo "✅ Update complete!"
 echo "👉 Run \`source ~/.zshrc\` if you haven’t already."
 echo "👉 Then try \`man webpCreate\` and \`webpCreate --help\`."
-echo "👉 If you need to update the dependencies as well, run 
-\`bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)\`"
+echo "👉 If you need to update the dependencies as well, \
+   run \`bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)\`"
