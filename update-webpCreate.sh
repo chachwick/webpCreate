@@ -9,13 +9,8 @@ Fetch the latest webpCreate, update-webpCreate, and man-page from GitHub.
 
 Options:
   -h, --help       Show this help and exit
-  -v, --version    Print the currently installed webpCreate version and exit
-  -q, --quiet      Suppress update messages (no progress output)
-
-Examples:
-  update-webpCreate
-  update-webpCreate --quiet
-  update-webpCreate --version
+  -v, --version    Print the installed webpCreate version and exit
+  -q, --quiet      Suppress progress output
 EOF
 }
 
@@ -39,20 +34,29 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Only print a message if not in quiet mode
+download_and_replace() {
+  local url=$1 dst=$2
+
+  # Download into a temp file next to the destination
+  local tmp="${dst}.new"
+  curl -fsSL "$url" -o "$tmp"
+  chmod +x "$tmp"
+  mv "$tmp" "$dst"
+}
+
 if [[ $QUIET == false ]]; then
   echo "🔄 Fetching latest webpCreate…"
 fi
-curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/webpCreate \
-  -o "$HOME/scripts/webpCreate"
-chmod +x "$HOME/scripts/webpCreate"
+download_and_replace \
+  "https://raw.githubusercontent.com/chachwick/webpCreate/main/webpCreate" \
+  "$HOME/scripts/webpCreate"
 
 if [[ $QUIET == false ]]; then
   echo "🔄 Fetching latest update-webpCreate…"
 fi
-curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/update-webpCreate.sh \
-  -o "$HOME/scripts/update-webpCreate"
-chmod +x "$HOME/scripts/update-webpCreate"
+download_and_replace \
+  "https://raw.githubusercontent.com/chachwick/webpCreate/main/update-webpCreate.sh" \
+  "$HOME/scripts/update-webpCreate"
 
 # Update man page
 BREW_PREFIX=$(brew --prefix)
@@ -61,15 +65,18 @@ mkdir -p "$MAN_DIR"
 if [[ $QUIET == false ]]; then
   echo "📄 Updating man page…"
 fi
-curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/man/webpCreate.1 \
-  -o "$MAN_DIR/webpCreate.1"
-chmod 644 "$MAN_DIR/webpCreate.1"
+
+local_man="${MAN_DIR}/webpCreate.1.new"
+curl -fsSL "https://raw.githubusercontent.com/chachwick/webpCreate/main/man/webpCreate.1" \
+  -o "$local_man"
+chmod 644 "$local_man"
+mv "$local_man" "${MAN_DIR}/webpCreate.1"
 
 if [[ $QUIET == false ]]; then
   echo ""
   echo "✅ Update complete!"
   echo "👉 Run \`source ~/.zshrc\` if you haven’t already."
-  echo "👉 Then try \`man webpCreate\` and \`webpCreate --help\`."
+  echo "👉 Then try \`man webpCreate\` or \`webpCreate --help\`."
   echo "👉 If you need to update dependencies as well, run:"
   echo "   bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)"
 fi
