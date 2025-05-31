@@ -7,8 +7,9 @@ webpCreate \- batch-convert images to WebP with organization & stats
 [\fIoptions\fR] [\fBdir1 dir2 ...\fR]
 .SH DESCRIPTION
 Convert JPEG, PNG (case-insensitive), and HEIC (via \fIsips\fR) files to WebP format.  
-Original files are moved into subdirectories (JPG/, PNG/, HEIC/) and outputs into WEBP/.  
+Original files are moved into \fIJPG/\fR, \fIPNG/\fR, or \fIHEIC/\fR **only if matching files are present**, and outputs are placed into \fIWEBP/\fR.  
 Reports per-directory file counts, sizes, and percentage savings.
+
 .SH OPTIONS
 .TP
 .B \-h , \-\-help
@@ -36,17 +37,33 @@ Process multiple directories in parallel.
 Convert current directory at default quality:
 .RS
 \fBwebpCreate\fR
+\fI▶ photo1.jpg: 1.20 MB → 0.10 MB\fR ... [other files]  
+\fI# Final Conversion Summary ...\fR
 .RE
 .TP
-Convert two folders, 75% quality, max side 1200px:
+Convert two folders, 75% quality, max side 1200px (you’ll see lines like “▶ filename: before → after”):
 .RS
-\fBwebpCreate \-q 75 \-\-maxd 1200 ~/Pics ~/MorePics\fR
+\fBwebpCreate -q 75 --maxd 1200 ~/Pics ~/MorePics\fR
+\fI▶ Pics/img01.jpg: 2.00 MB → 0.30 MB  
+▶ MorePics/photoA.png: 3.50 MB → 0.65 MB  
+# Final Conversion Summary ...\fR
 .RE
 .TP
 Process three folders in parallel, lossless, multi-threaded:
 .RS
-\fBwebpCreate \-\-parallel \-\-lossless \-\-mt dir1 dir2 dir3\fR
+\fBwebpCreate --parallel --lossless --mt dir1 dir2 dir3\fR
+\fI▶ dir1/pic01.jpg: 1.30 MB → 0.50 MB  
+▶ dir2/pic02.png: 2.10 MB → 0.40 MB ...\fR
 .RE
+
+Within each directory, the script creates:
+.JP
+ JPG/    only if JPEG files present  
+ PNG/    only if PNG files present  
+ HEIC/   only if HEIC files present  
+ WEBP/   for all WebP outputs  
+.IP
+
 .SH SEE ALSO
 .BR cwebp (1),
 .BR sips (1).
