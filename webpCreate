@@ -5,24 +5,9 @@ setopt null_glob
 show_help() {
   cat <<-EOF
 webpCreate: batch-convert images to WebP with concise progress and stats.
-
-What it does:
-  • Converts JPEG, PNG (case‐insensitive), and HEIC (via sips) to WebP  
-  • Organizes originals into JPG/, PNG/, HEIC/ and outputs into WEBP/  
-  • Handles name conflicts (overwrite/increment/skip)  
-  • Optionally resizes longest side ≤ max dimension  
-  • Supports quality, lossless, multi‐thread, arbitrary cwebp flags, parallel dirs  
-  • Reports per-directory file counts, sizes, total savings, and percentage reduction
-
 Usage:
   webpCreate [options] [dir1 dir2 ...]
   If no directories are given, defaults to the current directory.
-
-Installation & Updates:
-  • Initial install:  
-      bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)  
-  • For updates:  
-      update-webpCreate
 
 Options:
   -h, --help            Show this help and exit  
