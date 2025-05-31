@@ -1,4 +1,3 @@
-````markdown
 # webpCreate
 
 Batch-convert images to WebP with organization, optional resizing, multi-threading, parallel directories, conflict handling, and a clear savings report.
@@ -28,23 +27,25 @@ Batch-convert images to WebP with organization, optional resizing, multi-threadi
 Ensure you have:
 
 - **macOS** (10.15 or later)  
+
 - **Zsh** (relies on Zsh globbing and `read -q`)  
+
 - **Homebrew** for installing the rest:
+
   ```bash
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-````
+  ```
 
-* **cwebp** (from the `webp` package)
+```
+- **cwebp** (from the `webp` package)
+  - Docs: https://developers.google.com/speed/webp/docs/cwebp
+  - Install: `brew install webp`
+- **ffmpeg** (optional, for HEIC→WebP via `ffmpeg`)
+  - Docs: https://ffmpeg.org/
+  - Install: `brew install ffmpeg`
+- **sips** (built into macOS) for HEIC→JPEG conversion: `man sips`
 
-  * Docs: [https://developers.google.com/speed/webp/docs/cwebp](https://developers.google.com/speed/webp/docs/cwebp)
-  * Install: `brew install webp`
-* **ffmpeg** (optional, for HEIC→WebP via `ffmpeg`)
-
-  * Docs: [https://ffmpeg.org/](https://ffmpeg.org/)
-  * Install: `brew install ffmpeg`
-* **sips** (built into macOS) for HEIC→JPEG conversion: `man sips`
-
----
+------
 
 ## 🚀 Installation
 
@@ -68,7 +69,7 @@ After installation:
 source ~/.zshrc
 ```
 
----
+------
 
 ## 🔄 Updating
 
@@ -80,7 +81,7 @@ update-webpCreate
 
 No need to re-run the full installer unless you want to refresh dependencies.
 
----
+------
 
 ## 📂 Usage
 
@@ -88,22 +89,22 @@ No need to re-run the full installer unless you want to refresh dependencies.
 webpCreate [options] [dir1 dir2 ...]
 ```
 
-* **Default**: if no directories are given, processes the **current** working directory.
-* You can list multiple directories; with `--parallel`, they’ll run concurrently.
+- **Default**: if no directories are given, processes the **current** working directory.
+- You can list multiple directories; with `--parallel`, they’ll run concurrently.
 
----
+------
 
 ## ⚙️ Options
 
-| Flag                    | Description                                                   |
-| ----------------------- | ------------------------------------------------------------- |
-| `-h`, `--help`          | Show brief help and exit                                      |
-| `-q`, `--quality Q`     | Set `cwebp` quality (0–100; default 80)                       |
-| `--maxd N`              | Resize longest side to ≤ N px (non-interactive)               |
-| `--lossless`            | Use `cwebp -lossless` for lossless compression                |
-| `--mt`, `--multithread` | Enable `cwebp -mt` multi-threaded encoding                    |
+| Flag                    | Description                                                  |
+| ----------------------- | ------------------------------------------------------------ |
+| `-h`, `--help`          | Show brief help and exit                                     |
+| `-q`, `--quality Q`     | Set `cwebp` quality (0–100; default 80)                      |
+| `--maxd N`              | Resize longest side to ≤ N px (non-interactive)              |
+| `--lossless`            | Use `cwebp -lossless` for lossless compression               |
+| `--mt`, `--multithread` | Enable `cwebp -mt` multi-threaded encoding                   |
 | `--cwoption OPT`        | Pass arbitrary `OPT` (e.g. `-af`, `-z 9`) directly to `cwebp` |
-| `--parallel`, `-P`      | Process multiple directories **in parallel**                  |
+| `--parallel`, `-P`      | Process multiple directories **in parallel**                 |
 
 > **Resize Prompt**
 > If you don’t supply `--maxd`, the script will ask:
@@ -114,19 +115,21 @@ webpCreate [options] [dir1 dir2 ...]
 >
 > Enter a pixel value (e.g. `1200`) to enable resizing.
 
----
+------
 
 ## 🔗 Reference
 
-* **Full manual**:
+- **Full manual**:
 
   ```bash
   man webpCreate
   ```
-* **cwebp documentation**: [https://developers.google.com/speed/webp/docs/cwebp](https://developers.google.com/speed/webp/docs/cwebp)
-* **sips manual**: `man sips`
 
----
+- **cwebp documentation**: https://developers.google.com/speed/webp/docs/cwebp
+
+- **sips manual**: `man sips`
+
+------
 
 ## 📦 Examples
 
@@ -144,20 +147,17 @@ webpCreate --parallel --lossless --mt dirA dirB dirC
 webpCreate --cwoption "-af" ./images
 ```
 
----
+------
 
 ## 🤝 Contributing
 
 Contributions, issues, and pull requests are welcome!
 Feel free to improve the scripts, add ports for other shells, or suggest new features.
 
-Repo: [https://github.com/chachwick/webpCreate](https://github.com/chachwick/webpCreate)
+Repo: https://github.com/chachwick/webpCreate
 
----
+------
 
 ## 📄 License
 
 MIT © 2025 Chadwick Self
-
-```
-```
