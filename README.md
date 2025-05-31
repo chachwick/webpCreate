@@ -9,7 +9,7 @@ Batch-convert images to WebP with organization, optional resizing, multi-threadi
 `webpCreate` is a Zsh script that automates your image-optimization workflow:
 
 1. **Converts** JPEG, PNG (case-insensitive) and HEIC (via macOS’s `sips`) to WebP using Google’s `cwebp`.  
-2. **Organizes** originals into `JPG/`, `PNG/`, `HEIC/` and outputs into `WEBP/`.  
+2. **Organizes** originals into `JPG/`, `PNG/`, or `HEIC/` **only if matching files exist**, and places all WebP outputs into `WEBP/`.  
 3. **Handles** name conflicts (overwrite, increment, skip).  
 4. **Optionally resizes** so the longest side ≤ a max dimension you choose.  
 5. **Supports**:  
@@ -20,6 +20,23 @@ Batch-convert images to WebP with organization, optional resizing, multi-threadi
    - Parallel directory processing (`--parallel`/`-P`)  
 6. **Reports** per-directory file counts, sizes, total savings and percentage reduction.
 
+---
+
+## 🖥️ What You’ll See During Conversion
+
+Rather than verbose `cwebp` statistics, each converted file prints a single line showing its filename and size reduction. For example:
+```
+▶ Image (32).jpg: 2.45 MB → 0.85 MB
+▶ photo01.PNG: 3.10 MB → 0.65 MB
+```
+You’ll then get a final summary per directory, e.g.:
+```
+• Directory: ~/Pictures
+- Images processed: 8
+- Original total size: 25.60 MB
+- WebP total size: 5.12 MB
+- Savings: 20.48 MB (80% reduction)
+```
 ---
 
 ## 🛠️ Dependencies
