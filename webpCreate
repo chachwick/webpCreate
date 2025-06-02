@@ -210,6 +210,9 @@ process_directory(){
     done
   fi
 
+# ─── Summary Data Containers ───────────────────────────────────────────────────
+typeset -Ag SUM_COUNT SUM_JPG SUM_PNG SUM_WEBP
+
   # In parallel mode, write a .stats file; otherwise collect in arrays
   if [[ -n $PARALLEL_TMPDIR ]]; then
     printf "%s|%d|%d|%d\n" "$dir" "$count" "$orig_size" "$webp_size" \
