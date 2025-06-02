@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# webpCreate version: 1.10.5o
+# webpCreate version: 1.10.5v
 setopt null_glob
 
 # …rest of script…
