@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# webpCreate version: 1.12.2-beta
+# webpCreate version: 1.12.3-beta
 setopt null_glob
 
 # …rest of script…
@@ -10,8 +10,8 @@ show_help() {
   cat <<-EOF
 webpCreate: batch-convert images to WebP with concise progress and stats.
 Usage:
-  webpCreate [options] [dir1 dir2 ...]
-  If no directories are given, defaults to the current directory.
+  webpCreate [options] [dir1 dir2 ...] [file1 file2 ...]
+  If no directories or files are given, defaults to the current directory.
 
 Options:
   -h, --help            Show this help and exit  
@@ -23,6 +23,8 @@ Options:
   --parallel, -P        Process multiple directories in parallel  
   --jpeg                Also create JPEG copies with same dimensions/quality  
   -o, --orientation     Orientation handling: detect (default), warn, ignore
+  --dryrun, --dry-run   Preview results without converting (verbose mode)
+  --debug               Show debugging info and math calculations
 
 Examples:
   webpCreate .  
@@ -31,6 +33,8 @@ Examples:
   webpCreate --jpeg -q 85 --maxd 1600 ~/Photos  
   webpCreate -o warn --jpeg ~/Photos  
   webpCreate -o ignore ~/TrustedImages
+  webpCreate --dryrun --debug ~/Photos/photo1.jpg ~/Photos/photo2.png
+  webpCreate --debug file1.jpg file2.png
 EOF
 }
 
@@ -39,7 +43,10 @@ cwebp_opts=(-quiet)   # start with -quiet to suppress verbose cwebp output
 do_parallel=false
 create_jpeg=false
 orientation_mode="detect"  # default: detect, warn, ignore
+dry_run=false
+debug_mode=false
 dirs=()
+files=()
 quality=""
 maxd_flag=""
 
@@ -54,16 +61,40 @@ while [[ $# -gt 0 ]]; do
     --parallel|-P)      do_parallel=true; shift;;
     --jpeg)             create_jpeg=true; shift;;
     -o|--orientation)   shift; orientation_mode=$1; shift;;
+    --dryrun|--dry-run) dry_run=true; shift;;
+    --debug)            debug_mode=true; shift;;
     --) shift; break;;
     -*) echo "Unknown option: $1"; exit 1;;
-    *) dirs+=("$1"); shift;;
+    *) 
+      if [[ -f "$1" ]]; then
+        files+=("$1")
+      elif [[ -d "$1" ]]; then
+        dirs+=("$1")
+      else
+        echo "❌ '$1' is not a valid file or directory"; exit 1
+      fi
+      shift;;
   esac
 done
 
-(( ${#dirs[@]} == 0 )) && dirs=(".")
+# Set default directory if no dirs or files specified
+if (( ${#dirs[@]} == 0 && ${#files[@]} == 0 )); then
+  dirs=(".")
+fi
+
+# Enable debug output if debug mode
+if [[ $debug_mode == true ]]; then
+  echo "🐛 Debug mode enabled"
+  echo "🐛 Directories: ${dirs[@]:-none}"
+  echo "🐛 Files: ${files[@]:-none}"
+  echo "🐛 Quality: ${quality:-80}"
+  echo "🐛 Max dimension: ${maxDim:-none}"
+  echo "🐛 Orientation mode: $orientation_mode"
+  echo "🐛 Dry run: $dry_run"
+fi
 
 # Validate orientation mode
-case $orientation_mode in
+case "$orientation_mode" in
   detect|warn|ignore) ;;
   *) echo "❌ Invalid orientation mode: $orientation_mode. Use: detect, warn, or ignore"; exit 1;;
 esac
@@ -95,46 +126,83 @@ done
 
 # ─── Utilities ─────────────────────────────────────────────────────────────────
 human_size(){
-  local b=$1
-  printf "%d.%02d MB" $((b/1024/1024)) $(((b/1024)%1024*100/1024))
+  local b=${1:-0}
+  local mb=$((b/1024/1024))
+  local frac=$(((b/1024)%1024*100/1024))
+  printf "%d.%02d MB" $mb $frac
 }
 
 # Enhanced orientation detection using multiple metadata sources
 detect_orientation(){
   local file=$1
-  local exif_orient sips_orient mdls_orient final_orient
+  local exif_orient sips_orient mdls_orient exiftool_orient rotation_tag
   
-  # Try EXIF orientation first
+  if [[ $debug_mode == true ]]; then
+    echo "🐛   Checking orientation metadata for: $(basename "$file")"
+  fi
+  
+  # Try EXIF orientation first (most reliable)
   exif_orient=$(sips -g orientation "$file" 2>/dev/null | awk '/orientation/ {print $2}')
+  if [[ $debug_mode == true ]]; then
+    echo "🐛   sips orientation: $exif_orient"
+  fi
   
   if [[ "$exif_orient" != "<nil>" && "$exif_orient" != "" ]]; then
     echo "$exif_orient"
     return
   fi
   
-  # Try macOS metadata 
+  # Try macOS metadata (kMDItemOrientation)
   mdls_orient=$(mdls "$file" 2>/dev/null | grep -i "kMDItemOrientation" | awk '{print $NF}')
+  if [[ $debug_mode == true ]]; then
+    echo "🐛   kMDItemOrientation: $mdls_orient"
+  fi
   if [[ "$mdls_orient" != "" && "$mdls_orient" != "(null)" ]]; then
     echo "$mdls_orient"
     return
   fi
   
-  # Check for other orientation indicators in metadata
-  # Some cameras store orientation in different EXIF fields
+  # Check for macOS Rotation tag (used by Finder)
+  rotation_tag=$(mdls "$file" 2>/dev/null | grep -i "rotation" | awk '{print $NF}')
+  if [[ $debug_mode == true ]]; then
+    echo "🐛   Rotation tag: $rotation_tag"
+  fi
+  if [[ "$rotation_tag" != "" && "$rotation_tag" != "(null)" && "$rotation_tag" != "0" ]]; then
+    # Convert rotation degrees to EXIF orientation codes
+    case "$rotation_tag" in
+      "90") echo "6";;   # Rotate 90 CW
+      "180") echo "3";;  # Rotate 180
+      "270") echo "8";;  # Rotate 270 CW (90 CCW)
+      *) echo "$rotation_tag";;
+    esac
+    return
+  fi
+  
+  # Try exiftool if available for more comprehensive EXIF reading
   if command -v exiftool >/dev/null 2>&1; then
-    final_orient=$(exiftool "$file" 2>/dev/null | grep -i "orientation" | head -1 | awk -F: '{print $2}' | xargs)
-    if [[ "$final_orient" != "" ]]; then
-      case "$final_orient" in
+    exiftool_orient=$(exiftool "$file" 2>/dev/null | grep -i "orientation" | head -1 | awk -F: '{print $2}' | xargs)
+    if [[ $debug_mode == true ]]; then
+      echo "🐛   exiftool orientation: $exiftool_orient"
+    fi
+    if [[ "$exiftool_orient" != "" ]]; then
+      case "$exiftool_orient" in
         "Horizontal (normal)"|"1") echo "1";;
         "Rotate 90 CW"|"6") echo "6";;
         "Rotate 180"|"3") echo "3";;
         "Rotate 270 CW"|"8") echo "8";;
+        "Mirror horizontal"|"2") echo "2";;
+        "Mirror vertical"|"4") echo "4";;
+        "Mirror horizontal and rotate 270 CW"|"5") echo "5";;
+        "Mirror horizontal and rotate 90 CW"|"7") echo "7";;
         *) echo "<nil>";;
       esac
       return
     fi
   fi
   
+  if [[ $debug_mode == true ]]; then
+    echo "🐛   No orientation metadata found"
+  fi
   # No orientation metadata found
   echo "<nil>"
 }
@@ -163,9 +231,35 @@ convert_and_handle_conflict(){
 
   # Compute resize dimensions if needed
   if $do_resize; then
-    w=$(sips -g pixelWidth "$input"  | awk '/pixelWidth/  {print $2}')
-    h=$(sips -g pixelHeight "$input" | awk '/pixelHeight/ {print $2}')
+    w=$(sips -g pixelWidth "$input" 2>/dev/null | awk '/pixelWidth/  {print $2}')
+    h=$(sips -g pixelHeight "$input" 2>/dev/null | awk '/pixelHeight/ {print $2}')
     if (( w >= h )); then newW=$maxDim; newH=0; else newW=0; newH=$maxDim; fi
+  fi
+
+  # Debug output
+  if [[ $debug_mode == true ]]; then
+    echo "🐛 Processing: $input"
+    echo "🐛   Original dimensions: ${w:-unknown}×${h:-unknown}"
+    echo "🐛   Resize dimensions: ${newW:-original}×${newH:-original}"
+    echo "🐛   Orientation mode: $orientation_mode"
+    local detected_orient=$(detect_orientation "$input")
+    echo "🐛   Detected orientation: $detected_orient"
+  fi
+
+  # Dry run mode - just show what would be done
+  if [[ $dry_run == true ]]; then
+    local in_size out_size_est
+    in_size=$(stat -f%z "$input" 2>/dev/null)
+    # Rough estimate: WebP is typically 25-30% of original size
+    out_size_est=$(( ${in_size:-0} * 30 / 100 ))
+    
+    echo "🔍 WOULD PROCESS: $input"
+    echo "   → Output: WEBP/$out"
+    echo "   → Size estimate: $(human_size ${in_size:-0}) → $(human_size $out_size_est)"
+    if [[ $create_jpeg == true ]]; then
+      echo "   → Also create: JPG/${base}${suffix}.jpg"
+    fi
+    return 0
   fi
 
   # Create temporary image with orientation handling based on user preference
@@ -173,19 +267,14 @@ convert_and_handle_conflict(){
   
   case $orientation_mode in
     "ignore")
-      # User wants no orientation processing - preserve exact image data
-      # Use ImageMagick convert for resizing to avoid any rotation by sips
-      if $do_resize; then
-        if command -v convert >/dev/null 2>&1; then
-          convert "$input" -resize "${maxDim}x${maxDim}>" "$temp_input" 2>/dev/null || cp "$input" "$temp_input"
-        else
-          # Fallback: copy original if ImageMagick not available
-          echo "⚠️  Warning: ImageMagick not found, copying original size for $input"
-          cp "$input" "$temp_input"
-        fi
-      else
-        cp "$input" "$temp_input"
+      # TRULY preserve original file data - bypass all temp file processing
+      # Skip temp_input entirely and use original file directly with cwebp
+      if [[ $debug_mode == true ]]; then
+        echo "🐛   IGNORE mode: Bypassing all orientation processing"
       fi
+      
+      # Use original file directly - no temp file, no processing
+      temp_input="$input"
       ;;
       
     "warn")
@@ -208,39 +297,49 @@ convert_and_handle_conflict(){
       ;;
       
     "detect")
-      # Enhanced orientation detection and correction (default)
+      # Enhanced orientation detection - check EXIF first, then macOS metadata as fallback
       detected_orient=$(detect_orientation "$input")
       
+      if [[ $debug_mode == true ]]; then
+        echo "🐛   DETECT mode: Found orientation metadata: $detected_orient"
+      fi
+      
+      # Check EXIF orientation first
       if [[ "$detected_orient" != "<nil>" && "$detected_orient" != "" && "$detected_orient" != "1" ]]; then
-        # Orientation metadata found - apply it
+        if [[ $debug_mode == true ]]; then
+          echo "🐛   Applying EXIF orientation correction"
+        fi
+        # EXIF orientation found - let sips apply it
         if $do_resize; then
           sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
         else
           sips -s format jpeg -s formatOptions 100 "$input" --out "$temp_input" >/dev/null 2>&1
         fi
-        # Normalize orientation after applying transformation
+        # Reset orientation flag since transformation has been applied  
         sips -s orientation 1 "$temp_input" >/dev/null 2>&1
       else
-        # No orientation metadata - check for dimension/display mismatch
-        if $do_resize; then
-          sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
+        # No EXIF orientation - check macOS metadata as fallback
+        mdls_orient=$(mdls "$input" 2>/dev/null | grep -i "kMDItemOrientation" | awk '{print $NF}')
+        
+        if [[ "$mdls_orient" != "" && "$mdls_orient" != "(null)" && "$mdls_orient" != "0" ]]; then
+          if [[ $debug_mode == true ]]; then
+            echo "🐛   Applying macOS metadata orientation (kMDItemOrientation: $mdls_orient)"
+          fi
+          # macOS has display orientation info - apply it
+          if $do_resize; then
+            sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
+          else
+            sips -s format jpeg -s formatOptions 100 "$input" --out "$temp_input" >/dev/null 2>&1
+          fi
         else
-          cp "$input" "$temp_input"
-        fi
-        
-        # For images without metadata, check if they might need correction
-        # This is conservative - only fix obvious mismatches
-        temp_w=$(sips -g pixelWidth "$temp_input" 2>/dev/null | awk '/pixelWidth/ {print $2}')
-        temp_h=$(sips -g pixelHeight "$temp_input" 2>/dev/null | awk '/pixelHeight/ {print $2}')
-        
-        if [[ -n "$temp_w" && -n "$temp_h" ]]; then
-          # Only attempt correction for large dimension differences that suggest camera rotation
-          if (( h > w && temp_w > temp_h && (temp_w - temp_h) > 500 )); then
-            # Likely a rotated portrait that should be portrait
-            sips --rotate 90 "$temp_input" >/dev/null 2>&1
-          elif (( w > h && temp_h > temp_w && (temp_h - temp_w) > 500 )); then
-            # Likely a rotated landscape that should be landscape
-            sips --rotate -90 "$temp_input" >/dev/null 2>&1
+          if [[ $debug_mode == true ]]; then
+            echo "🐛   No orientation metadata found - preserving as-is"
+          fi
+          # No metadata at all - preserve as-is
+          if $do_resize; then
+            sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
+          else
+            cp "$input" "$temp_input"
           fi
         fi
       fi
@@ -263,8 +362,24 @@ convert_and_handle_conflict(){
     fi
   fi
 
-  # Run cwebp quietly with the temp file (which preserves EXIF orientation)
-  cwebp "${cwebp_opts[@]}" "$temp_input" -o "WEBP/$out"
+  # Run cwebp with appropriate options based on mode
+  if [[ $orientation_mode == "ignore" ]]; then
+    # In ignore mode, disable EXIF orientation processing entirely
+    if [[ $debug_mode == true ]]; then
+      echo "🐛   IGNORE mode: Disabling EXIF orientation in cwebp"
+    fi
+    
+    if $do_resize; then
+      # Use cwebp's resize with metadata stripping
+      cwebp "${cwebp_opts[@]}" -resize $maxDim 0 -metadata none "$temp_input" -o "WEBP/$out"
+    else
+      # Strip all metadata to ignore orientation
+      cwebp "${cwebp_opts[@]}" -metadata none "$temp_input" -o "WEBP/$out"
+    fi
+  else
+    # Normal processing through temp file
+    cwebp "${cwebp_opts[@]}" "$temp_input" -o "WEBP/$out"
+  fi
 
   # Create JPEG copy if requested
   if $create_jpeg; then
@@ -286,17 +401,43 @@ convert_and_handle_conflict(){
       fi
       
       if (( jpeg_action != 2 )); then  # not skip
-        # Create JPEG with same quality and dimensions as WebP
-        sips -s formatOptions $jpeg_quality "$temp_input" --out "JPG/$jpeg_out" >/dev/null 2>&1
+        # Create JPEG - handle ignore mode specially
+        if [[ $orientation_mode == "ignore" ]]; then
+          # Use cwebp to create JPEG to avoid sips orientation processing
+          if $do_resize; then
+            cwebp -jpeg_quality $jpeg_quality -resize $maxDim 0 "$input" -o "JPG/$jpeg_out" 2>/dev/null || \
+            sips -s formatOptions $jpeg_quality "$temp_input" --out "JPG/$jpeg_out" >/dev/null 2>&1
+          else
+            # For no resize in ignore mode, convert directly
+            sips -s format jpeg -s formatOptions $jpeg_quality "$input" --out "JPG/$jpeg_out" >/dev/null 2>&1
+          fi
+        else
+          # Normal JPEG creation through temp file
+          sips -s formatOptions $jpeg_quality "$temp_input" --out "JPG/$jpeg_out" >/dev/null 2>&1
+        fi
       fi
     else
-      # Create JPEG with same quality and dimensions as WebP
-      sips -s formatOptions $jpeg_quality "$temp_input" --out "JPG/$jpeg_out" >/dev/null 2>&1
+      # Create JPEG - handle ignore mode specially
+      if [[ $orientation_mode == "ignore" ]]; then
+        # Use original file to avoid orientation processing
+        if $do_resize; then
+          cwebp -jpeg_quality $jpeg_quality -resize $maxDim 0 "$input" -o "JPG/$jpeg_out" 2>/dev/null || \
+          sips -s formatOptions $jpeg_quality "$temp_input" --out "JPG/$jpeg_out" >/dev/null 2>&1
+        else
+          # For no resize in ignore mode, convert directly
+          sips -s format jpeg -s formatOptions $jpeg_quality "$input" --out "JPG/$jpeg_out" >/dev/null 2>&1
+        fi
+      else
+        # Normal JPEG creation through temp file
+        sips -s formatOptions $jpeg_quality "$temp_input" --out "JPG/$jpeg_out" >/dev/null 2>&1
+      fi
     fi
   fi
 
-  # Clean up temp file
-  rm -f "$temp_input"
+  # Clean up temp file (but not if it's the original in ignore mode)
+  if [[ "$temp_input" != "$input" ]]; then
+    rm -f "$temp_input"
+  fi
   # Print concise info: filename, before→after sizes
   local in_size out_size
   in_size=$(stat -f%z "$input" 2>/dev/null)
@@ -328,25 +469,33 @@ process_directory(){
   # HEIC → JPEG
   local heics=( *.heic(N) *.HEIC(N) )
   if (( ${#heics[@]} )); then
-    mkdir -p HEIC
-    for f in "${heics[@]}"; do
-      sips -s format jpeg "$f" --out "${f%.*}.jpg"
-      mv "$f" HEIC/
-    done
+    if [[ $dry_run == true ]]; then
+      echo "🔍 WOULD CONVERT ${#heics[@]} HEIC files to JPEG and move to HEIC/"
+    else
+      mkdir -p HEIC
+      for f in "${heics[@]}"; do
+        sips -s format jpeg "$f" --out "${f%.*}.jpg"
+        mv "$f" HEIC/
+      done
+    fi
   fi
 
 
   # Convert JPG/JPEG only if present
   local jpgs=( *.jpg(N) *.JPG(N) *.jpeg(N) *.JPEG(N) )
   if (( ${#jpgs[@]} )); then
-    mkdir -p JPG
+    if [[ $dry_run != true ]]; then
+      mkdir -p JPG
+    fi
     for f in "${jpgs[@]}"; do
       [[ -f $f ]] || continue
       (( count++ ))
       file_size=$(stat -f%z "$f" 2>/dev/null)
       orig_size=$(( orig_size + ${file_size:-0} ))
       if convert_and_handle_conflict "$f"; then
-        mv "$f" JPG/
+        if [[ $dry_run != true ]]; then
+          mv "$f" JPG/
+        fi
       fi
     done
   fi
@@ -354,14 +503,18 @@ process_directory(){
   # Convert PNG only if present
   local pngs=( *.png(N) *.PNG(N) )
   if (( ${#pngs[@]} )); then
-    mkdir -p PNG
+    if [[ $dry_run != true ]]; then
+      mkdir -p PNG
+    fi
     for f in "${pngs[@]}"; do
       [[ -f $f ]] || continue
       (( count++ ))
       file_size=$(stat -f%z "$f" 2>/dev/null)
       orig_size=$(( orig_size + ${file_size:-0} ))
       if convert_and_handle_conflict "$f"; then
-        mv "$f" PNG/
+        if [[ $dry_run != true ]]; then
+          mv "$f" PNG/
+        fi
       fi
     done
   fi
@@ -387,14 +540,69 @@ process_directory(){
   cd - &>/dev/null
 }
 
+# ─── Declare Associative Arrays for Stats Collection ────────────────────────────
+declare -A SUM_COUNT SUM_JPG SUM_WEBP
+dirs_processed=()
+
 # ─── Prepare for Parallel Stats Collection ─────────────────────────────────────
 if [[ $do_parallel = true ]]; then
   PARALLEL_TMPDIR=$(mktemp -d /tmp/webpCreate.XXXX)
   echo "🛠  Parallel mode: writing per-dir stats to $PARALLEL_TMPDIR"
 fi
 
-# ─── Main Loop: Parallel or Sequential ────────────────────────────────────────
-if [[ $do_parallel = true ]]; then
+# ─── Process Individual Files Function ────────────────────────────────────────
+process_files() {
+  local file count=0 orig_size=0 webp_size=0 file_size
+  
+  echo "── Processing individual files ──────────────────────────────"
+  
+  for file in "${files[@]}"; do
+    [[ -f "$file" ]] || { echo "❌ File not found: $file"; continue; }
+    
+    # Check if it's a supported image format
+    case "${file##*.}" in
+      jpg|jpeg|png|JPG|JPEG|PNG) ;;
+      *) echo "⚠️  Skipping unsupported file: $file"; continue ;;
+    esac
+    
+    (( count++ ))
+    file_size=$(stat -f%z "$file" 2>/dev/null)
+    orig_size=$(( orig_size + ${file_size:-0} ))
+    
+    if convert_and_handle_conflict "$file"; then
+      if [[ $dry_run != true ]]; then
+        # Move to appropriate folder based on file type
+        case "${file##*.}" in
+          jpg|jpeg|JPG|JPEG) mkdir -p JPG; mv "$file" JPG/ 2>/dev/null || true ;;
+          png|PNG) mkdir -p PNG; mv "$file" PNG/ 2>/dev/null || true ;;
+        esac
+      fi
+    fi
+  done
+  
+  # Calculate WebP sizes
+  if [[ -d WEBP ]]; then
+    for w in WEBP/*.webp(N); do
+      file_size=$(stat -f%z "$w" 2>/dev/null)
+      webp_size=$(( webp_size + ${file_size:-0} ))
+    done
+  fi
+  
+  # Store stats for final summary
+  SUM_COUNT["individual_files"]=$count
+  SUM_JPG["individual_files"]=$orig_size
+  SUM_WEBP["individual_files"]=$webp_size
+  dirs_processed+=("individual_files")
+}
+
+# ─── Main Loop: Files, then Directories ────────────────────────────────────────
+# Process individual files first
+if (( ${#files[@]} > 0 )); then
+  process_files
+fi
+
+# Then process directories
+if [[ $do_parallel = true ]] && (( ${#dirs[@]} > 0 )); then
   for d in "${dirs[@]}"; do
     process_directory "$d" &
   done
@@ -414,7 +622,7 @@ if [[ -n $PARALLEL_TMPDIR ]]; then
     IFS='|' read -r dir count orig webp < "$stats"
     saved=$(( ${orig:-0} - ${webp:-0} ))
     if (( ${orig:-0} > 0 )); then
-      pct=$((( saved * 1000 / orig + 5 ) / 10 ))
+      pct=$(( (${saved:-0} * 1000 / ${orig:-1} + 5) / 10 ))
     else
       pct=0
     fi
@@ -433,15 +641,24 @@ else
     webp=${SUM_WEBP[$dir]}
     saved=$(( ${orig:-0} - ${webp:-0} ))
     if (( ${orig:-0} > 0 )); then
-      pct=$((( saved * 1000 / orig + 5 ) / 10 ))
+      pct=$(( (${saved:-0} * 1000 / ${orig:-1} + 5) / 10 ))
     else
       pct=0
     fi
     echo
-    echo "• Directory: $dir"
+    if [[ "$dir" == "individual_files" ]]; then
+      echo "• Individual files processed:"
+    else
+      echo "• Directory: $dir"
+    fi
     echo "   - Images processed:    $count"
     echo "   - Original total size: $(human_size $orig)"
     echo "   - WebP total size:     $(human_size $webp)"
     echo "   - Savings:             $(human_size $saved) ($pct% reduction)"
+    
+    # Debug output for final calculations
+    if [[ $debug_mode == true ]]; then
+      echo "🐛   Debug: orig=$orig, webp=$webp, saved=$saved, pct=$pct"
+    fi
   done
 fi
