@@ -21,13 +21,13 @@ Options:
   --mt, --multithread   Enable cwebp -mt (multi‐threaded)  
   --cwoption OPT        Pass arbitrary OPT (e.g. "-af") to cwebp  
   --parallel, -P        Process multiple directories in parallel  
-  --jpeg                Also create JPEG copies with same dimensions/quality  
+  --jpeg                Also create JPEG copies with same dimensions/quality
 
 Examples:
   webpCreate .  
   webpCreate -q 75 --maxd 1200 ~/Pictures ~/Downloads  
   webpCreate --parallel --lossless --mt dirA dirB  
-  webpCreate --jpeg -q 85 --maxd 1600 ~/Photos  
+  webpCreate --jpeg -q 85 --maxd 1600 ~/Photos
 EOF
 }
 
@@ -174,7 +174,6 @@ convert_and_handle_conflict(){
 
   # Clean up temp file if we created one
   [[ "$temp_input" != "$input" ]] && rm -f "$temp_input"
-
   # Print concise info: filename, before→after sizes
   local in_size out_size
   in_size=$(stat -f%z "$input")
@@ -250,7 +249,6 @@ process_directory(){
       webp_size=$(( webp_size + $(stat -f%z "$w") ))
     done
   fi
-
   # In parallel mode, write a .stats file; otherwise collect in arrays
   if [[ -n $PARALLEL_TMPDIR ]]; then
     printf "%s|%d|%d|%d\n" "$dir" "$count" "$orig_size" "$webp_size" \

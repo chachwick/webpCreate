@@ -8,7 +8,7 @@ webpCreate \- batch-convert images to WebP with organization & stats
 .SH DESCRIPTION
 Convert JPEG, PNG (case-insensitive), and HEIC (via \fIsips\fR) files to WebP format while preserving EXIF orientation data.  
 Original files are moved into \fIJPG/\fR, \fIPNG/\fR, or \fIHEIC/\fR **only if matching files are present**, and outputs are placed into \fIWEBP/\fR.  
-Optionally creates JPEG copies alongside WebP files with same dimensions and quality.  
+Optionally creates JPEG copies alongside WebP files with same dimensions and quality.
 Reports per-directory file counts, sizes, and percentage savings.
 
 .SH OPTIONS
@@ -69,7 +69,7 @@ Create both WebP and JPEG copies, quality 85, max dimension 1600px:
 
 Within each directory, the script creates:
 .JP
- JPG/    for moved original JPEG files (and optional JPEG copies when using --jpeg)  
+ JPG/    for moved original JPEG files (and optional JPEG copies when using --jpeg)
  PNG/    only if PNG files present  
  HEIC/   only if HEIC files present  
  WEBP/   for all WebP outputs  

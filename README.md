@@ -14,7 +14,7 @@
 4. **Optionally creates** JPEG copies with same dimensions and quality settings alongside WebP files.  
 5. **Handles** name conflicts (overwrite, increment, skip).  
 6. **Optionally resizes** so the longest side ≤ a max dimension you choose.  
-7. **Supports**:  
+7. **Supports**:
    - Quality tuning (`-q`/`--quality`)  
    - Lossless mode (`--lossless`)  
    - Multi-threading (`--mt`)  
