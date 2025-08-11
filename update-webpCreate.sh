@@ -119,4 +119,3 @@ if [[ $QUIET == false ]]; then
   echo "👉 If you need to update dependencies as well, run:"
   echo "   bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)"
 fi
-```
