@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# webpCreate version: 1.11.2-beta
+# webpCreate version: 1.11.4-beta
 setopt null_glob
 
 # …rest of script…
@@ -117,14 +117,45 @@ convert_and_handle_conflict(){
     if (( w >= h )); then newW=$maxDim; newH=0; else newW=0; newH=$maxDim; fi
   fi
 
-  # Create temporary image with proper EXIF orientation applied
+  # Create temporary image with proper orientation handling
   temp_input="${base}_temp.jpg"
-  if $do_resize; then
-    # Resize while preserving EXIF orientation
-    sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
+  
+  # Check for EXIF orientation data
+  exif_orientation=$(sips -g orientation "$input" 2>/dev/null | awk '/orientation/ {print $2}')
+  
+  if [[ "$exif_orientation" != "<nil>" && "$exif_orientation" != "" && "$exif_orientation" != "1" ]]; then
+    # EXIF orientation data exists and needs to be applied
+    if $do_resize; then
+      # Resize while applying EXIF orientation
+      sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
+    else
+      # Apply EXIF orientation without resizing
+      sips -s format jpeg -s formatOptions 100 "$input" --out "$temp_input" >/dev/null 2>&1
+    fi
+    # Normalize orientation to 1 after applying transformation
+    sips -s orientation 1 "$temp_input" >/dev/null 2>&1
   else
-    # Just apply EXIF orientation without resizing
-    sips -s format jpeg "$input" --out "$temp_input" >/dev/null 2>&1
+    # No EXIF orientation data - use dimension-based handling
+    if $do_resize; then
+      sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
+    else
+      cp "$input" "$temp_input"
+    fi
+    
+    # Verify temp file orientation matches original intent
+    temp_w=$(sips -g pixelWidth "$temp_input" 2>/dev/null | awk '/pixelWidth/ {print $2}')
+    temp_h=$(sips -g pixelHeight "$temp_input" 2>/dev/null | awk '/pixelHeight/ {print $2}')
+    
+    # Fix orientation mismatches for images without EXIF
+    if [[ -n "$temp_w" && -n "$temp_h" ]]; then
+      if (( h > w && temp_w > temp_h )); then
+        # Original was portrait, temp became landscape - rotate to portrait
+        sips --rotate 90 "$temp_input" >/dev/null 2>&1
+      elif (( w > h && temp_h > temp_w )); then
+        # Original was landscape, temp became portrait - rotate to landscape
+        sips --rotate -90 "$temp_input" >/dev/null 2>&1
+      fi
+    fi
   fi
 
   mkdir -p WEBP
