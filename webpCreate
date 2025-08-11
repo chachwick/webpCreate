@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# webpCreate version: 1.12.0-beta
+# webpCreate version: 1.12.1-beta
 setopt null_glob
 
 # …rest of script…
@@ -292,17 +292,17 @@ convert_and_handle_conflict(){
   rm -f "$temp_input"
   # Print concise info: filename, before→after sizes
   local in_size out_size
-  in_size=$(stat -f%z "$input")
-  out_size=$(stat -f%z "WEBP/$out")
+  in_size=$(stat -f%z "$input" 2>/dev/null)
+  out_size=$(stat -f%z "WEBP/$out" 2>/dev/null)
   printf "▶ %s: %s → %s\n" \
-    "$input" "$(human_size $in_size)" "$(human_size $out_size)"
+    "$input" "$(human_size ${in_size:-0})" "$(human_size ${out_size:-0})"
 
   return 0
 }
 
 # ─── Directory Processing ────────────────────────────────────────────────────────
 process_directory(){
-  local dir=$1 f size orig_size webp_size count=0
+  local dir=$1 f size orig_size=0 webp_size=0 count=0
   echo "── Processing: $dir ─────────────────────────────────────────"
   cd "$dir" || { echo "❌ Cannot cd into $dir"; return; }
 
@@ -338,7 +338,8 @@ process_directory(){
     for f in "${jpgs[@]}"; do
       [[ -f $f ]] || continue
       (( count++ ))
-      orig_size=$(( orig_size + $(stat -f%z "$f") ))
+      file_size=$(stat -f%z "$f" 2>/dev/null)
+      orig_size=$(( orig_size + ${file_size:-0} ))
       if convert_and_handle_conflict "$f"; then
         mv "$f" JPG/
       fi
@@ -352,7 +353,8 @@ process_directory(){
     for f in "${pngs[@]}"; do
       [[ -f $f ]] || continue
       (( count++ ))
-      orig_size=$(( orig_size + $(stat -f%z "$f") ))
+      file_size=$(stat -f%z "$f" 2>/dev/null)
+      orig_size=$(( orig_size + ${file_size:-0} ))
       if convert_and_handle_conflict "$f"; then
         mv "$f" PNG/
       fi
@@ -362,7 +364,8 @@ process_directory(){
   # Tally WEBP sizes only if WEBP folder exists
   if [[ -d WEBP ]]; then
     for w in WEBP/*.webp(N); do
-      webp_size=$(( webp_size + $(stat -f%z "$w") ))
+      file_size=$(stat -f%z "$w" 2>/dev/null)
+      webp_size=$(( webp_size + ${file_size:-0} ))
     done
   fi
   # In parallel mode, write a .stats file; otherwise collect in arrays
@@ -404,8 +407,8 @@ echo "# Final Conversion Summary"
 if [[ -n $PARALLEL_TMPDIR ]]; then
   for stats in "$PARALLEL_TMPDIR"/*.stats; do
     IFS='|' read -r dir count orig webp < "$stats"
-    saved=$(( orig - webp ))
-    if (( orig > 0 )); then
+    saved=$(( ${orig:-0} - ${webp:-0} ))
+    if (( ${orig:-0} > 0 )); then
       pct=$((( saved * 1000 / orig + 5 ) / 10 ))
     else
       pct=0
@@ -423,8 +426,8 @@ else
     count=${SUM_COUNT[$dir]}
     orig=${SUM_JPG[$dir]}
     webp=${SUM_WEBP[$dir]}
-    saved=$(( orig - webp ))
-    if (( orig > 0 )); then
+    saved=$(( ${orig:-0} - ${webp:-0} ))
+    if (( ${orig:-0} > 0 )); then
       pct=$((( saved * 1000 / orig + 5 ) / 10 ))
     else
       pct=0
