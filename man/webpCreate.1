@@ -1,0 +1,80 @@
+.\" Manpage for webpCreate
+.TH WEBPCREATE 1 "January 2025" "v1.11.0-beta" "webpCreate manual"
+.SH NAME
+webpCreate \- batch-convert images to WebP with organization & stats
+.SH SYNOPSIS
+.B webpCreate
+[\fIoptions\fR] [\fBdir1 dir2 ...\fR]
+.SH DESCRIPTION
+Convert JPEG, PNG (case-insensitive), and HEIC (via \fIsips\fR) files to WebP format while preserving EXIF orientation data.  
+Original files are moved into \fIJPG/\fR, \fIPNG/\fR, or \fIHEIC/\fR **only if matching files are present**, and outputs are placed into \fIWEBP/\fR.  
+Optionally creates JPEG copies alongside WebP files with same dimensions and quality.  
+Reports per-directory file counts, sizes, and percentage savings.
+
+.SH OPTIONS
+.TP
+.B \-h , \-\-help
+Show brief help message and exit.
+.TP
+.B \-q , \-\-quality \fIQ\fR
+Set \fBcwebp\fR quality to \fIQ\fR (0–100; default 80).
+.TP
+.B \-\-maxd \fIN\fR
+Resize longest side to at most \fIN\fR pixels (non-interactive).
+.TP
+.B \-\-lossless
+Use loseless compression (passes \fB\-lossless\fR to \fBcwebp\fR).
+.TP
+.B \-\-mt , \-\-multithread
+Enable intra-file multi-threaded encoding (passes \fB\-mt\fR to \fBcwebp\fR).
+.TP
+.B \-\-cwoption \fIOPT\fR
+Pass arbitrary \fBOPT\fR (e.g. \fB\-af\fR) directly to \fBcwebp\fR.
+.TP
+.B \-\-parallel , \-P
+Process multiple directories in parallel.
+.TP
+.B \-\-jpeg
+Also create JPEG copies with same dimensions and quality settings as WebP files.
+.SH EXAMPLES
+.TP
+Convert current directory at default quality:
+.RS
+\fBwebpCreate\fR
+\fI▶ photo1.jpg: 1.20 MB → 0.10 MB\fR ... [other files]  
+\fI# Final Conversion Summary ...\fR
+.RE
+.TP
+Convert two folders, 75% quality, max side 1200px (you’ll see lines like “▶ filename: before → after”):
+.RS
+\fBwebpCreate -q 75 --maxd 1200 ~/Pics ~/MorePics\fR
+\fI▶ Pics/img01.jpg: 2.00 MB → 0.30 MB  
+▶ MorePics/photoA.png: 3.50 MB → 0.65 MB  
+# Final Conversion Summary ...\fR
+.RE
+.TP
+Process three folders in parallel, lossless, multi-threaded:
+.RS
+\fBwebpCreate --parallel --lossless --mt dir1 dir2 dir3\fR
+\fI▶ dir1/pic01.jpg: 1.30 MB → 0.50 MB  
+▶ dir2/pic02.png: 2.10 MB → 0.40 MB ...\fR
+.RE
+.TP
+Create both WebP and JPEG copies, quality 85, max dimension 1600px:
+.RS
+\fBwebpCreate --jpeg -q 85 --maxd 1600 ~/Photos\fR
+\fI▶ photo1.jpg: 3.20 MB → 0.85 MB  
+▶ portrait.png: 2.50 MB → 0.60 MB ...\fR
+.RE
+
+Within each directory, the script creates:
+.JP
+ JPG/    for moved original JPEG files (and optional JPEG copies when using --jpeg)  
+ PNG/    only if PNG files present  
+ HEIC/   only if HEIC files present  
+ WEBP/   for all WebP outputs  
+.IP
+
+.SH SEE ALSO
+.BR cwebp (1),
+.BR sips (1).
