@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# webpCreate version: 1.11.0-beta
+# webpCreate version: 1.11.1-beta
 setopt null_glob
 
 # …rest of script…
@@ -117,11 +117,14 @@ convert_and_handle_conflict(){
     if (( w >= h )); then newW=$maxDim; newH=0; else newW=0; newH=$maxDim; fi
   fi
 
-  # Create temporary resized image with EXIF preservation if needed
+  # Create temporary image with proper EXIF orientation applied
+  temp_input="${base}_temp.jpg"
   if $do_resize; then
-    temp_input="${base}_temp.jpg"
-    # Use sips to resize while preserving EXIF orientation
+    # Resize while preserving EXIF orientation
     sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
+  else
+    # Just apply EXIF orientation without resizing
+    sips -s format jpeg "$input" --out "$temp_input" >/dev/null 2>&1
   fi
 
   mkdir -p WEBP
@@ -135,7 +138,7 @@ convert_and_handle_conflict(){
       while [[ -e WEBP/${base}${suffix}_$n.webp ]]; do ((n++)); done
       out="${base}${suffix}_$n.webp"
     else
-      [[ "$temp_input" != "$input" ]] && rm -f "$temp_input"
+      rm -f "$temp_input"
       return 1
     fi
   fi
@@ -172,8 +175,8 @@ convert_and_handle_conflict(){
     fi
   fi
 
-  # Clean up temp file if we created one
-  [[ "$temp_input" != "$input" ]] && rm -f "$temp_input"
+  # Clean up temp file
+  rm -f "$temp_input"
   # Print concise info: filename, before→after sizes
   local in_size out_size
   in_size=$(stat -f%z "$input")
