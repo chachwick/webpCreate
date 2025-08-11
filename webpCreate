@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# webpCreate version: 1.11.4-beta
+# webpCreate version: 1.12.0-beta
 setopt null_glob
 
 # …rest of script…
@@ -21,13 +21,16 @@ Options:
   --mt, --multithread   Enable cwebp -mt (multi‐threaded)  
   --cwoption OPT        Pass arbitrary OPT (e.g. "-af") to cwebp  
   --parallel, -P        Process multiple directories in parallel  
-  --jpeg                Also create JPEG copies with same dimensions/quality
+  --jpeg                Also create JPEG copies with same dimensions/quality  
+  -o, --orientation     Orientation handling: detect (default), warn, ignore
 
 Examples:
   webpCreate .  
   webpCreate -q 75 --maxd 1200 ~/Pictures ~/Downloads  
   webpCreate --parallel --lossless --mt dirA dirB  
-  webpCreate --jpeg -q 85 --maxd 1600 ~/Photos
+  webpCreate --jpeg -q 85 --maxd 1600 ~/Photos  
+  webpCreate -o warn --jpeg ~/Photos  
+  webpCreate -o ignore ~/TrustedImages
 EOF
 }
 
@@ -35,6 +38,7 @@ EOF
 cwebp_opts=(-quiet)   # start with -quiet to suppress verbose cwebp output
 do_parallel=false
 create_jpeg=false
+orientation_mode="detect"  # default: detect, warn, ignore
 dirs=()
 quality=""
 maxd_flag=""
@@ -49,6 +53,7 @@ while [[ $# -gt 0 ]]; do
     --cwoption)         shift; cwebp_opts+=("$1"); shift;;
     --parallel|-P)      do_parallel=true; shift;;
     --jpeg)             create_jpeg=true; shift;;
+    -o|--orientation)   shift; orientation_mode=$1; shift;;
     --) shift; break;;
     -*) echo "Unknown option: $1"; exit 1;;
     *) dirs+=("$1"); shift;;
@@ -56,6 +61,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 (( ${#dirs[@]} == 0 )) && dirs=(".")
+
+# Validate orientation mode
+case $orientation_mode in
+  detect|warn|ignore) ;;
+  *) echo "❌ Invalid orientation mode: $orientation_mode. Use: detect, warn, or ignore"; exit 1;;
+esac
 
 # ─── Resize Prompt ─────────────────────────────────────────────────────────────
 if [[ -z $maxd_flag ]]; then
@@ -88,6 +99,46 @@ human_size(){
   printf "%d.%02d MB" $((b/1024/1024)) $(((b/1024)%1024*100/1024))
 }
 
+# Enhanced orientation detection using multiple metadata sources
+detect_orientation(){
+  local file=$1
+  local exif_orient sips_orient mdls_orient final_orient
+  
+  # Try EXIF orientation first
+  exif_orient=$(sips -g orientation "$file" 2>/dev/null | awk '/orientation/ {print $2}')
+  
+  if [[ "$exif_orient" != "<nil>" && "$exif_orient" != "" ]]; then
+    echo "$exif_orient"
+    return
+  fi
+  
+  # Try macOS metadata 
+  mdls_orient=$(mdls "$file" 2>/dev/null | grep -i "kMDItemOrientation" | awk '{print $NF}')
+  if [[ "$mdls_orient" != "" && "$mdls_orient" != "(null)" ]]; then
+    echo "$mdls_orient"
+    return
+  fi
+  
+  # Check for other orientation indicators in metadata
+  # Some cameras store orientation in different EXIF fields
+  if command -v exiftool >/dev/null 2>&1; then
+    final_orient=$(exiftool "$file" 2>/dev/null | grep -i "orientation" | head -1 | awk -F: '{print $2}' | xargs)
+    if [[ "$final_orient" != "" ]]; then
+      case "$final_orient" in
+        "Horizontal (normal)"|"1") echo "1";;
+        "Rotate 90 CW"|"6") echo "6";;
+        "Rotate 180"|"3") echo "3";;
+        "Rotate 270 CW"|"8") echo "8";;
+        *) echo "<nil>";;
+      esac
+      return
+    fi
+  fi
+  
+  # No orientation metadata found
+  echo "<nil>"
+}
+
 ask_conflict(){
   local file=$1 choice
   while true; do
@@ -117,46 +168,77 @@ convert_and_handle_conflict(){
     if (( w >= h )); then newW=$maxDim; newH=0; else newW=0; newH=$maxDim; fi
   fi
 
-  # Create temporary image with proper orientation handling
+  # Create temporary image with orientation handling based on user preference
   temp_input="${base}_temp.jpg"
   
-  # Check for EXIF orientation data
-  exif_orientation=$(sips -g orientation "$input" 2>/dev/null | awk '/orientation/ {print $2}')
-  
-  if [[ "$exif_orientation" != "<nil>" && "$exif_orientation" != "" && "$exif_orientation" != "1" ]]; then
-    # EXIF orientation data exists and needs to be applied
-    if $do_resize; then
-      # Resize while applying EXIF orientation
-      sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
-    else
-      # Apply EXIF orientation without resizing
-      sips -s format jpeg -s formatOptions 100 "$input" --out "$temp_input" >/dev/null 2>&1
-    fi
-    # Normalize orientation to 1 after applying transformation
-    sips -s orientation 1 "$temp_input" >/dev/null 2>&1
-  else
-    # No EXIF orientation data - use dimension-based handling
-    if $do_resize; then
-      sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
-    else
-      cp "$input" "$temp_input"
-    fi
-    
-    # Verify temp file orientation matches original intent
-    temp_w=$(sips -g pixelWidth "$temp_input" 2>/dev/null | awk '/pixelWidth/ {print $2}')
-    temp_h=$(sips -g pixelHeight "$temp_input" 2>/dev/null | awk '/pixelHeight/ {print $2}')
-    
-    # Fix orientation mismatches for images without EXIF
-    if [[ -n "$temp_w" && -n "$temp_h" ]]; then
-      if (( h > w && temp_w > temp_h )); then
-        # Original was portrait, temp became landscape - rotate to portrait
-        sips --rotate 90 "$temp_input" >/dev/null 2>&1
-      elif (( w > h && temp_h > temp_w )); then
-        # Original was landscape, temp became portrait - rotate to landscape
-        sips --rotate -90 "$temp_input" >/dev/null 2>&1
+  case $orientation_mode in
+    "ignore")
+      # User wants no orientation processing - preserve exact image data
+      if $do_resize; then
+        sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
+      else
+        cp "$input" "$temp_input"
       fi
-    fi
-  fi
+      ;;
+      
+    "warn")
+      # Detect orientation issues and warn user, but don't auto-fix
+      detected_orient=$(detect_orientation "$input")
+      
+      # Check for potential orientation mismatch
+      if [[ "$detected_orient" == "<nil>" ]] && (( (w > h && w > 2000) || (h > w && h > 2000) )); then
+        echo "⚠️  Warning: $input has no orientation metadata"
+        echo "   File dimensions: ${w}×${h}, Preview may auto-rotate for display"
+        echo "   WebP output may not match Preview appearance"
+      fi
+      
+      # Process without orientation correction
+      if $do_resize; then
+        sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
+      else
+        cp "$input" "$temp_input"
+      fi
+      ;;
+      
+    "detect")
+      # Enhanced orientation detection and correction (default)
+      detected_orient=$(detect_orientation "$input")
+      
+      if [[ "$detected_orient" != "<nil>" && "$detected_orient" != "" && "$detected_orient" != "1" ]]; then
+        # Orientation metadata found - apply it
+        if $do_resize; then
+          sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
+        else
+          sips -s format jpeg -s formatOptions 100 "$input" --out "$temp_input" >/dev/null 2>&1
+        fi
+        # Normalize orientation after applying transformation
+        sips -s orientation 1 "$temp_input" >/dev/null 2>&1
+      else
+        # No orientation metadata - check for dimension/display mismatch
+        if $do_resize; then
+          sips -Z $maxDim "$input" --out "$temp_input" >/dev/null 2>&1
+        else
+          cp "$input" "$temp_input"
+        fi
+        
+        # For images without metadata, check if they might need correction
+        # This is conservative - only fix obvious mismatches
+        temp_w=$(sips -g pixelWidth "$temp_input" 2>/dev/null | awk '/pixelWidth/ {print $2}')
+        temp_h=$(sips -g pixelHeight "$temp_input" 2>/dev/null | awk '/pixelHeight/ {print $2}')
+        
+        if [[ -n "$temp_w" && -n "$temp_h" ]]; then
+          # Only attempt correction for large dimension differences that suggest camera rotation
+          if (( h > w && temp_w > temp_h && (temp_w - temp_h) > 500 )); then
+            # Likely a rotated portrait that should be portrait
+            sips --rotate 90 "$temp_input" >/dev/null 2>&1
+          elif (( w > h && temp_h > temp_w && (temp_h - temp_w) > 500 )); then
+            # Likely a rotated landscape that should be landscape
+            sips --rotate -90 "$temp_input" >/dev/null 2>&1
+          fi
+        fi
+      fi
+      ;;
+  esac
 
   mkdir -p WEBP
   if [[ -e WEBP/$out ]]; then

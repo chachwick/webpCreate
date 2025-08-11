@@ -21,6 +21,7 @@
    - Arbitrary `cwebp` flags (`--cwoption`)  
    - Parallel directory processing (`--parallel`/`-P`)  
    - Dual-format output (`--jpeg`)  
+   - Flexible orientation handling (`-o detect/warn/ignore`)  
 8. **Reports** per-directory file counts, sizes, total savings and percentage reduction.
 
 ---
@@ -123,6 +124,7 @@ webpCreate [options] [dir1 dir2 ...]
 | `--cwoption OPT`        | Pass arbitrary `OPT` (e.g. `-af`, `-z 9`) directly to `cwebp` |
 | `--parallel`, `-P`      | Process multiple directories **in parallel**                 |
 | `--jpeg`                | Also create JPEG copies with same dimensions/quality         |
+| `-o`, `--orientation`   | Orientation handling: `detect` (default), `warn`, `ignore`   |
 
 > **Resize Prompt**
 > If you don’t supply `--maxd`, the script will ask:
@@ -132,6 +134,47 @@ webpCreate [options] [dir1 dir2 ...]
 > ```
 >
 > Enter a pixel value (e.g. `1200`) to enable resizing.
+
+------
+
+## 🔄 Orientation Handling
+
+`webpCreate` provides three modes to handle image orientation and rotation:
+
+### Orientation Modes
+
+| Mode       | Description                                                   | Use Case                                    |
+|------------|---------------------------------------------------------------|---------------------------------------------|
+| `detect`   | **Default**. Enhanced metadata detection from EXIF, macOS metadata, and exiftool | Most images, automatic orientation correction |
+| `warn`     | Show warnings about orientation issues but don't auto-correct | Diagnostic mode, understand potential issues |
+| `ignore`   | Preserve exact image data, no orientation processing          | Images that should never be rotated        |
+
+### Common Scenarios
+
+**Images appear rotated in WebP but not JPEG?**
+```bash
+# Use ignore mode to preserve exact image data
+webpCreate -o ignore --jpeg ~/Photos
+```
+
+**Want to see what orientation issues exist?**
+```bash
+# Use warn mode to get diagnostic information
+webpCreate -o warn ~/Photos
+```
+
+**Trust the script to handle orientation automatically?**
+```bash
+# Use detect mode (default) - no flag needed
+webpCreate --jpeg ~/Photos
+```
+
+### Technical Details
+
+- **detect mode**: Checks EXIF orientation, macOS `kMDItemOrientation`, and exiftool data
+- **Preview vs File Dimensions**: Some images display as portrait in Preview but have landscape file dimensions
+- **Metadata Priority**: EXIF → macOS metadata → exiftool → dimension analysis
+- **Conservative Approach**: Only applies orientation correction when confident
 
 ------
 
@@ -166,6 +209,12 @@ webpCreate --cwoption "-af" ./images
 
 # Create both WebP and JPEG copies, quality 85, max 1600px
 webpCreate --jpeg -q 85 --maxd 1600 ~/Photos
+
+# Preserve exact image orientation (no rotation)
+webpCreate -o ignore --jpeg --maxd 1600 ~/Photos
+
+# Show orientation warnings but don't auto-correct
+webpCreate -o warn ~/Photos
 ```
 
 ------

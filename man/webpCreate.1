@@ -1,5 +1,5 @@
 .\" Manpage for webpCreate
-.TH WEBPCREATE 1 "January 2025" "v1.11.4-beta" "webpCreate manual"
+.TH WEBPCREATE 1 "August 2025" "v1.12.0-beta" "webpCreate manual"
 .SH NAME
 webpCreate \- batch-convert images to WebP with organization & stats
 .SH SYNOPSIS
@@ -36,6 +36,9 @@ Process multiple directories in parallel.
 .TP
 .B \-\-jpeg
 Also create JPEG copies with same dimensions and quality settings as WebP files.
+.TP
+.B \-o , \-\-orientation \fIMODE\fR
+Set orientation handling mode: \fBdetect\fR (default, enhanced metadata detection), \fBwarn\fR (show warnings but don't auto-correct), \fBignore\fR (preserve exact image data).
 .SH EXAMPLES
 .TP
 Convert current directory at default quality:
