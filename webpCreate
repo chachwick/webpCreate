@@ -135,7 +135,7 @@ human_size(){
 # Enhanced orientation detection using multiple metadata sources
 detect_orientation(){
   local file=$1
-  local exif_orient sips_orient mdls_orient exiftool_orient rotation_tag
+  local exif_orient mdls_orient rotation_tag exiftool_orient exiftool_rotation
   
   if [[ $debug_mode == true ]]; then
     echo "🐛   Checking orientation metadata for: $(basename "$file")"
@@ -147,7 +147,7 @@ detect_orientation(){
     echo "🐛   sips orientation: $exif_orient"
   fi
   
-  if [[ "$exif_orient" != "<nil>" && "$exif_orient" != "" ]]; then
+  if [[ "$exif_orient" != "<nil>" && "$exif_orient" != "" && "$exif_orient" != "0" ]]; then
     echo "$exif_orient"
     return
   fi
@@ -157,7 +157,7 @@ detect_orientation(){
   if [[ $debug_mode == true ]]; then
     echo "🐛   kMDItemOrientation: $mdls_orient"
   fi
-  if [[ "$mdls_orient" != "" && "$mdls_orient" != "(null)" ]]; then
+  if [[ "$mdls_orient" != "" && "$mdls_orient" != "(null)" && "$mdls_orient" != "0" ]]; then
     echo "$mdls_orient"
     return
   fi
@@ -168,34 +168,27 @@ detect_orientation(){
     echo "🐛   Rotation tag: $rotation_tag"
   fi
   if [[ "$rotation_tag" != "" && "$rotation_tag" != "(null)" && "$rotation_tag" != "0" ]]; then
-    # Convert rotation degrees to EXIF orientation codes
-    case "$rotation_tag" in
-      "90") echo "6";;   # Rotate 90 CW
-      "180") echo "3";;  # Rotate 180
-      "270") echo "8";;  # Rotate 270 CW (90 CCW)
-      *) echo "$rotation_tag";;
-    esac
+    echo "$rotation_tag"
     return
   fi
   
-  # Try exiftool if available for more comprehensive EXIF reading
+  # Try exiftool for more comprehensive EXIF/rotation data
   if command -v exiftool >/dev/null 2>&1; then
-    exiftool_orient=$(exiftool "$file" 2>/dev/null | grep -i "orientation" | head -1 | awk -F: '{print $2}' | xargs)
+    exiftool_orient=$(exiftool -s -s -s -Orientation -n "$file" 2>/dev/null)
     if [[ $debug_mode == true ]]; then
       echo "🐛   exiftool orientation: $exiftool_orient"
     fi
-    if [[ "$exiftool_orient" != "" ]]; then
-      case "$exiftool_orient" in
-        "Horizontal (normal)"|"1") echo "1";;
-        "Rotate 90 CW"|"6") echo "6";;
-        "Rotate 180"|"3") echo "3";;
-        "Rotate 270 CW"|"8") echo "8";;
-        "Mirror horizontal"|"2") echo "2";;
-        "Mirror vertical"|"4") echo "4";;
-        "Mirror horizontal and rotate 270 CW"|"5") echo "5";;
-        "Mirror horizontal and rotate 90 CW"|"7") echo "7";;
-        *) echo "<nil>";;
-      esac
+    if [[ -n "$exiftool_orient" && "$exiftool_orient" != "0" ]]; then
+      echo "$exiftool_orient"
+      return
+    fi
+
+    exiftool_rotation=$(exiftool -s -s -s -Rotation -n "$file" 2>/dev/null)
+    if [[ $debug_mode == true ]]; then
+      echo "🐛   exiftool rotation: $exiftool_rotation"
+    fi
+    if [[ -n "$exiftool_rotation" && "$exiftool_rotation" != "0" ]]; then
+      echo "$exiftool_rotation"
       return
     fi
   fi
@@ -305,7 +298,7 @@ convert_and_handle_conflict(){
       fi
       
       # Check EXIF orientation first
-      if [[ "$detected_orient" != "<nil>" && "$detected_orient" != "" && "$detected_orient" != "1" ]]; then
+      if [[ "$detected_orient" != "<nil>" && "$detected_orient" != "" && "$detected_orient" != "1" && "$detected_orient" != "0" ]]; then
         if [[ $debug_mode == true ]]; then
           echo "🐛   Applying EXIF orientation correction"
         fi
