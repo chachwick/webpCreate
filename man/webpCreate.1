@@ -1,86 +1,145 @@
-.\" Manpage for webpCreate
-.TH WEBPCREATE 1 "August 2025" "v1.12.0-beta" "webpCreate manual"
+.TH WEBPCREATE 1 "August 2025" "webpCreate 1.0" "User Commands"
+
 .SH NAME
-webpCreate \- batch-convert images to WebP with organization & stats
+webpCreate \- Batch convert images to WebP with resizing, EXIF preservation, multi-threading, and organization.
+
 .SH SYNOPSIS
 .B webpCreate
-[\fIoptions\fR] [\fBdir1 dir2 ...\fR]
+[\fIOPTIONS\fR] [\fIDIRECTORY\fR ...]
+
 .SH DESCRIPTION
-Convert JPEG, PNG (case-insensitive), and HEIC (via \fIsips\fR) files to WebP format while preserving EXIF orientation data.  
-Original files are moved into \fIJPG/\fR, \fIPNG/\fR, or \fIHEIC/\fR **only if matching files are present**, and outputs are placed into \fIWEBP/\fR.  
-Optionally creates JPEG copies alongside WebP files with same dimensions and quality.
-Reports per-directory file counts, sizes, and percentage savings.
+\fBwebpCreate\fR is a Zsh-based batch image conversion tool for macOS 10.15+ that:
+.IP \[bu] 2
+Converts JPEG, PNG, and HEIC to WebP (optionally also keeps JPEG copies).
+.IP \[bu]
+Preserves EXIF orientation metadata, or warns/ignores as specified.
+.IP \[bu]
+Optionally resizes images to a maximum dimension.
+.IP \[bu]
+Organizes originals and outputs into separate subdirectories.
+.IP \[bu]
+Provides per-directory savings reports.
+.IP \[bu]
+Includes dry-run and debug modes for safe testing.
+
+If no directories are specified, the current working directory is processed. Multiple directories can be given; use \fB--parallel\fR to process them concurrently.
 
 .SH OPTIONS
 .TP
-.B \-h , \-\-help
-Show brief help message and exit.
+.BR -h ", " --help
+Display a brief help message and exit.
+
 .TP
-.B \-q , \-\-quality \fIQ\fR
-Set \fBcwebp\fR quality to \fIQ\fR (0–100; default 80).
+.BR -q " " \fIQ\fR ", " --quality " " \fIQ\fR
+Set WebP quality (0–100). Default: 80.
+
 .TP
-.B \-\-maxd \fIN\fR
-Resize longest side to at most \fIN\fR pixels (non-interactive).
+.BR --maxd " " \fIN\fR
+Resize images so their longest side is \fIN\fR pixels or less. Skips prompt.
+
 .TP
-.B \-\-lossless
-Use loseless compression (passes \fB\-lossless\fR to \fBcwebp\fR).
+.B --lossless
+Use lossless WebP compression.
+
 .TP
-.B \-\-mt , \-\-multithread
-Enable intra-file multi-threaded encoding (passes \fB\-mt\fR to \fBcwebp\fR).
+.BR --mt ", " --multithread
+Enable multi-threaded encoding via \fBcwebp -mt\fR.
+
 .TP
-.B \-\-cwoption \fIOPT\fR
-Pass arbitrary \fBOPT\fR (e.g. \fB\-af\fR) directly to \fBcwebp\fR.
+.BR --cwoption " " \fIOPT\fR
+Pass arbitrary options directly to \fBcwebp\fR (e.g., \fB-af\fR, \fB-z 9\fR).
+
 .TP
-.B \-\-parallel , \-P
+.BR --parallel ", " -P
 Process multiple directories in parallel.
+
 .TP
-.B \-\-jpeg
-Also create JPEG copies with same dimensions and quality settings as WebP files.
+.B --jpeg
+Also create JPEG copies alongside WebP outputs.
+
 .TP
-.B \-o , \-\-orientation \fIMODE\fR
-Set orientation handling mode: \fBdetect\fR (default, enhanced metadata detection), \fBwarn\fR (show warnings but don't auto-correct), \fBignore\fR (preserve exact image data).
-.TP
-.B \-\-no-meta
-Do not embed creator comment metadata in output files.
-.SH EXAMPLES
-.TP
-Convert current directory at default quality:
+.BR -o " " \fIMODE\fR ", " --orientation " " \fIMODE\fR
+Set orientation handling mode:
 .RS
-\fBwebpCreate\fR
-\fI▶ photo1.jpg: 1.20 MB → 0.10 MB\fR ... [other files]  
-\fI# Final Conversion Summary ...\fR
-.RE
-.TP
-Convert two folders, 75% quality, max side 1200px (you’ll see lines like “▶ filename: before → after”):
-.RS
-\fBwebpCreate -q 75 --maxd 1200 ~/Pics ~/MorePics\fR
-\fI▶ Pics/img01.jpg: 2.00 MB → 0.30 MB  
-▶ MorePics/photoA.png: 3.50 MB → 0.65 MB  
-# Final Conversion Summary ...\fR
-.RE
-.TP
-Process three folders in parallel, lossless, multi-threaded:
-.RS
-\fBwebpCreate --parallel --lossless --mt dir1 dir2 dir3\fR
-\fI▶ dir1/pic01.jpg: 1.30 MB → 0.50 MB  
-▶ dir2/pic02.png: 2.10 MB → 0.40 MB ...\fR
-.RE
-.TP
-Create both WebP and JPEG copies, quality 85, max dimension 1600px:
-.RS
-\fBwebpCreate --jpeg -q 85 --maxd 1600 ~/Photos\fR
-\fI▶ photo1.jpg: 3.20 MB → 0.85 MB  
-▶ portrait.png: 2.50 MB → 0.60 MB ...\fR
+.IP detect 8
+(default) Automatically detect and correct orientation from EXIF and macOS metadata.
+.IP warn
+Warn about orientation issues without changing the image data.
+.IP ignore
+Skip orientation handling and preserve raw pixel layout.
 .RE
 
-Within each directory, the script creates:
-.JP
- JPG/    for moved original JPEG files (and optional JPEG copies when using --jpeg)
- PNG/    only if PNG files present  
- HEIC/   only if HEIC files present  
- WEBP/   for all WebP outputs  
-.IP
+.TP
+.B --no-meta
+Skip embedding "Created by webpCreate" metadata in output files.
+
+.TP
+.B --dryrun
+Simulate the conversion without creating, overwriting, or moving files.
+
+.TP
+.B --debug
+Enable verbose debug logging for troubleshooting.
+
+.TP
+.B --overwrite
+Automatically overwrite conflicting files without prompting.
+
+.TP
+.B --skip
+Automatically skip files that would cause a name conflict.
+
+.TP
+.B --increment
+Automatically rename conflicting files by appending a counter.
+
+.SH EXAMPLES
+Process current directory with defaults:
+.RS
+webpCreate
+.RE
+
+Convert with quality 75 and resize to 1200px:
+.RS
+webpCreate -q 75 --maxd 1200 ~/Pictures
+.RE
+
+Lossless, multi-threaded, parallel processing:
+.RS
+webpCreate --lossless --mt --parallel dirA dirB dirC
+.RE
+
+Create both WebP and JPEG:
+.RS
+webpCreate --jpeg -q 85 ./assets
+.RE
+
+Ignore orientation metadata:
+.RS
+webpCreate -o ignore ./photos
+.RE
+
+Preview without changes:
+.RS
+webpCreate --dryrun ./images
+.RE
+
+Debug with verbose output:
+.RS
+webpCreate --debug --jpeg ~/Pictures
+.RE
 
 .SH SEE ALSO
 .BR cwebp (1),
-.BR sips (1).
+.BR ffmpeg (1),
+.BR sips (1),
+.BR exiftool (1)
+
+Project page:
+.UR https://github.com/chachwick/webpCreate
+.UE
+
+.SH AUTHOR
+Chadwick Self <https://github.com/chachwick>
+
+Licensed under the MIT License.
