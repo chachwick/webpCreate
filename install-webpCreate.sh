@@ -18,6 +18,13 @@ else
   brew install ffmpeg
 fi
 
+echo "📦 Installing or upgrading exiftool..."
+if brew list exiftool &>/dev/null; then
+  brew upgrade exiftool
+else
+  brew install exiftool
+fi
+
 echo "📁 Ensuring ~/scripts exists..."
 mkdir -p "$HOME/scripts"
 

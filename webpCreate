@@ -14,15 +14,16 @@ Usage:
   If no directories or files are given, defaults to the current directory.
 
 Options:
-  -h, --help            Show this help and exit  
-  -q, --quality Q       Set cwebp quality (0–100; default 80)  
-  --maxd N              Resize longest side to ≤ N px (skips prompt)  
-  --lossless            Use cwebp -lossless  
-  --mt, --multithread   Enable cwebp -mt (multi‐threaded)  
-  --cwoption OPT        Pass arbitrary OPT (e.g. "-af") to cwebp  
-  --parallel, -P        Process multiple directories in parallel  
-  --jpeg                Also create JPEG copies with same dimensions/quality  
+  -h, --help            Show this help and exit
+  -q, --quality Q       Set cwebp quality (0–100; default 80)
+  --maxd N              Resize longest side to ≤ N px (skips prompt)
+  --lossless            Use cwebp -lossless
+  --mt, --multithread   Enable cwebp -mt (multi‐threaded)
+  --cwoption OPT        Pass arbitrary OPT (e.g. "-af") to cwebp
+  --parallel, -P        Process multiple directories in parallel
+  --jpeg                Also create JPEG copies with same dimensions/quality
   -o, --orientation     Orientation handling: detect (default), warn, ignore
+  --no-meta             Skip embedding comment metadata
   --dryrun, --dry-run   Preview results without converting (verbose mode)
   --debug               Show debugging info and math calculations
 
@@ -45,6 +46,7 @@ create_jpeg=false
 orientation_mode="detect"  # default: detect, warn, ignore
 dry_run=false
 debug_mode=false
+embed_meta=true
 dirs=()
 files=()
 quality=""
@@ -61,6 +63,7 @@ while [[ $# -gt 0 ]]; do
     --parallel|-P)      do_parallel=true; shift;;
     --jpeg)             create_jpeg=true; shift;;
     -o|--orientation)   shift; orientation_mode=$1; shift;;
+    --no-meta)          embed_meta=false; shift;;
     --dryrun|--dry-run) dry_run=true; shift;;
     --debug)            debug_mode=true; shift;;
     --) shift; break;;
@@ -91,6 +94,7 @@ if [[ $debug_mode == true ]]; then
   echo "🐛 Max dimension: ${maxDim:-none}"
   echo "🐛 Orientation mode: $orientation_mode"
   echo "🐛 Dry run: $dry_run"
+  echo "🐛 Embed metadata comment: $embed_meta"
 fi
 
 # Validate orientation mode
@@ -115,9 +119,14 @@ else
 fi
 
 # ─── Dependency Checks ──────────────────────────────────────────────────────────
-for cmd in cwebp sips; do
+required_cmds=(cwebp sips)
+if [[ $embed_meta == true ]]; then
+  required_cmds+=(exiftool)
+fi
+for cmd in "${required_cmds[@]}"; do
   if ! command -v $cmd &>/dev/null; then
     brew_cmd=${cmd==cwebp?webp:imagemagick}
+    if [[ $cmd == exiftool ]]; then brew_cmd=exiftool; fi
     echo "❌ Missing '$cmd'. Install with: brew install $brew_cmd"
     echo "   Or run installer: bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)"
     exit 1
@@ -216,7 +225,7 @@ ask_conflict(){
 
 # ─── Convert + Conflict Handler ─────────────────────────────────────────────────
 convert_and_handle_conflict(){
-  local input=$1 base out newW newH w h suffix temp_input orientation rotate_degrees rotated
+  local input=$1 base out newW newH w h suffix temp_input orientation rotate_degrees rotated jpeg_out
   base=${input%.*}
   suffix=$([ "$do_resize" = true ] && echo "-$maxDim" || echo "")
   out="${base}${suffix}.webp"
@@ -398,6 +407,10 @@ convert_and_handle_conflict(){
     cwebp "${cwebp_opts[@]}" "$temp_input" -o "WEBP/$out"
   fi
 
+  if [[ $embed_meta == true ]]; then
+    exiftool -overwrite_original -Comment='Created with webpCreate (chachwick.com – github.com/chachwick/webpCreate)' "WEBP/$out" >/dev/null 2>&1
+  fi
+
   # Create JPEG copy if requested
   if $create_jpeg; then
     local jpeg_out="${base}${suffix}.jpg"
@@ -449,6 +462,10 @@ convert_and_handle_conflict(){
         sips -s formatOptions $jpeg_quality "$temp_input" --out "JPG/$jpeg_out" >/dev/null 2>&1
       fi
     fi
+  fi
+
+  if [[ $embed_meta == true && $create_jpeg == true && -f "JPG/$jpeg_out" ]]; then
+    exiftool -overwrite_original -Comment='Created with webpCreate (chachwick.com – github.com/chachwick/webpCreate)' "JPG/$jpeg_out" >/dev/null 2>&1
   fi
 
   # Clean up temp file (but not if it's the original in ignore mode)

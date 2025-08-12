@@ -15,14 +15,15 @@
 5. **Handles** name conflicts (overwrite, increment, skip).  
 6. **Optionally resizes** so the longest side ≤ a max dimension you choose.  
 7. **Supports**:
-   - Quality tuning (`-q`/`--quality`)  
-   - Lossless mode (`--lossless`)  
-   - Multi-threading (`--mt`)  
-   - Arbitrary `cwebp` flags (`--cwoption`)  
-   - Parallel directory processing (`--parallel`/`-P`)  
-   - Dual-format output (`--jpeg`)  
-   - Flexible orientation handling (`-o detect/warn/ignore`)  
+   - Quality tuning (`-q`/`--quality`)
+   - Lossless mode (`--lossless`)
+   - Multi-threading (`--mt`)
+   - Arbitrary `cwebp` flags (`--cwoption`)
+   - Parallel directory processing (`--parallel`/`-P`)
+   - Dual-format output (`--jpeg`)
+   - Flexible orientation handling (`-o detect/warn/ignore`)
 8. **Reports** per-directory file counts, sizes, total savings and percentage reduction.
+9. **Embeds** a creator comment in output files (omit with `--no-meta`).
 
 ---
 
@@ -55,13 +56,16 @@ Ensure you have:
 
 The installation script (see below will use Homebrew to install the following tools)
 
-- **cwebp** (from the `webp` package)
-  - Docs: https://developers.google.com/speed/webp/docs/cwebp
-  - Install: `brew install webp`
-- **ffmpeg** (optional, for HEIC→WebP via `ffmpeg`)
-  - Docs: https://ffmpeg.org/
-  - Install: `brew install ffmpeg`
-- **sips** (built into macOS) for HEIC→JPEG conversion: `man sips`
+  - **cwebp** (from the `webp` package)
+    - Docs: https://developers.google.com/speed/webp/docs/cwebp
+    - Install: `brew install webp`
+  - **ffmpeg** (optional, for HEIC→WebP via `ffmpeg`)
+    - Docs: https://ffmpeg.org/
+    - Install: `brew install ffmpeg`
+  - **exiftool** for embedding metadata comments and enhanced orientation detection
+    - Docs: https://exiftool.org/
+    - Install: `brew install exiftool`
+  - **sips** (built into macOS) for HEIC→JPEG conversion: `man sips`
 
 ------
 
@@ -125,6 +129,7 @@ webpCreate [options] [dir1 dir2 ...]
 | `--parallel`, `-P`      | Process multiple directories **in parallel**                 |
 | `--jpeg`                | Also create JPEG copies with same dimensions/quality         |
 | `-o`, `--orientation`   | Orientation handling: `detect` (default), `warn`, `ignore`   |
+| `--no-meta`             | Do not embed creator comment metadata                         |
 
 > **Resize Prompt**
 > If you don’t supply `--maxd`, the script will ask:
