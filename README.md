@@ -10,7 +10,7 @@
 
 ## 🚀 Why webpCreate?
 
-Tired of juggling a dozen image folders, resizing by hand, and worrying about losing EXIF orientation?
+Tired of juggling a dozen image folders, slow load-times, resizing by hand, and worrying about losing EXIF orientation?
 `webpCreate` is a **Zsh-powered batch converter** for **JPEG, PNG, and HEIC** that:
 
 - Converts to **WebP** (optionally keeps JPEGs too)
@@ -177,4 +177,3 @@ PRs welcome! Add features, fix bugs, or help port to other shells.
 ## 📄 License
 
 MIT © 2025 Chadwick Self
-
