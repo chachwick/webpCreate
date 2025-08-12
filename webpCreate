@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# webpCreate version: 1.12.3-beta
+# webpCreate version: 1.12.4-beta
 setopt null_glob
 
 # …rest of script…
@@ -14,15 +14,16 @@ Usage:
   If no directories or files are given, defaults to the current directory.
 
 Options:
-  -h, --help            Show this help and exit  
-  -q, --quality Q       Set cwebp quality (0–100; default 80)  
-  --maxd N              Resize longest side to ≤ N px (skips prompt)  
-  --lossless            Use cwebp -lossless  
-  --mt, --multithread   Enable cwebp -mt (multi‐threaded)  
-  --cwoption OPT        Pass arbitrary OPT (e.g. "-af") to cwebp  
-  --parallel, -P        Process multiple directories in parallel  
-  --jpeg                Also create JPEG copies with same dimensions/quality  
+  -h, --help            Show this help and exit
+  -q, --quality Q       Set cwebp quality (0–100; default 80)
+  --maxd N              Resize longest side to ≤ N px (skips prompt)
+  --lossless            Use cwebp -lossless
+  --mt, --multithread   Enable cwebp -mt (multi‐threaded)
+  --cwoption OPT        Pass arbitrary OPT (e.g. "-af") to cwebp
+  --parallel, -P        Process multiple directories in parallel
+  --jpeg                Also create JPEG copies with same dimensions/quality
   -o, --orientation     Orientation handling: detect (default), warn, ignore
+  --no-meta             Skip embedding comment metadata
   --dryrun, --dry-run   Preview results without converting (verbose mode)
   --debug               Show debugging info and math calculations
 
@@ -45,6 +46,7 @@ create_jpeg=false
 orientation_mode="detect"  # default: detect, warn, ignore
 dry_run=false
 debug_mode=false
+embed_meta=true
 dirs=()
 files=()
 quality=""
@@ -61,6 +63,7 @@ while [[ $# -gt 0 ]]; do
     --parallel|-P)      do_parallel=true; shift;;
     --jpeg)             create_jpeg=true; shift;;
     -o|--orientation)   shift; orientation_mode=$1; shift;;
+    --no-meta)          embed_meta=false; shift;;
     --dryrun|--dry-run) dry_run=true; shift;;
     --debug)            debug_mode=true; shift;;
     --) shift; break;;
@@ -91,6 +94,7 @@ if [[ $debug_mode == true ]]; then
   echo "🐛 Max dimension: ${maxDim:-none}"
   echo "🐛 Orientation mode: $orientation_mode"
   echo "🐛 Dry run: $dry_run"
+  echo "🐛 Embed metadata comment: $embed_meta"
 fi
 
 # Validate orientation mode
@@ -115,9 +119,14 @@ else
 fi
 
 # ─── Dependency Checks ──────────────────────────────────────────────────────────
-for cmd in cwebp sips; do
+required_cmds=(cwebp sips)
+if [[ $embed_meta == true ]]; then
+  required_cmds+=(exiftool)
+fi
+for cmd in "${required_cmds[@]}"; do
   if ! command -v $cmd &>/dev/null; then
     brew_cmd=${cmd==cwebp?webp:imagemagick}
+    if [[ $cmd == exiftool ]]; then brew_cmd=exiftool; fi
     echo "❌ Missing '$cmd'. Install with: brew install $brew_cmd"
     echo "   Or run installer: bash <(curl -fsSL https://raw.githubusercontent.com/chachwick/webpCreate/main/install-webpCreate.sh)"
     exit 1
@@ -135,7 +144,7 @@ human_size(){
 # Enhanced orientation detection using multiple metadata sources
 detect_orientation(){
   local file=$1
-  local exif_orient sips_orient mdls_orient exiftool_orient rotation_tag
+  local exif_orient mdls_orient rotation_tag exiftool_orient exiftool_rotation
   
   if [[ $debug_mode == true ]]; then
     echo "🐛   Checking orientation metadata for: $(basename "$file")"
@@ -147,7 +156,7 @@ detect_orientation(){
     echo "🐛   sips orientation: $exif_orient"
   fi
   
-  if [[ "$exif_orient" != "<nil>" && "$exif_orient" != "" ]]; then
+  if [[ "$exif_orient" != "<nil>" && "$exif_orient" != "" && "$exif_orient" != "0" ]]; then
     echo "$exif_orient"
     return
   fi
@@ -157,7 +166,7 @@ detect_orientation(){
   if [[ $debug_mode == true ]]; then
     echo "🐛   kMDItemOrientation: $mdls_orient"
   fi
-  if [[ "$mdls_orient" != "" && "$mdls_orient" != "(null)" ]]; then
+  if [[ "$mdls_orient" != "" && "$mdls_orient" != "(null)" && "$mdls_orient" != "0" ]]; then
     echo "$mdls_orient"
     return
   fi
@@ -168,34 +177,27 @@ detect_orientation(){
     echo "🐛   Rotation tag: $rotation_tag"
   fi
   if [[ "$rotation_tag" != "" && "$rotation_tag" != "(null)" && "$rotation_tag" != "0" ]]; then
-    # Convert rotation degrees to EXIF orientation codes
-    case "$rotation_tag" in
-      "90") echo "6";;   # Rotate 90 CW
-      "180") echo "3";;  # Rotate 180
-      "270") echo "8";;  # Rotate 270 CW (90 CCW)
-      *) echo "$rotation_tag";;
-    esac
+    echo "$rotation_tag"
     return
   fi
   
-  # Try exiftool if available for more comprehensive EXIF reading
+  # Try exiftool for more comprehensive EXIF/rotation data
   if command -v exiftool >/dev/null 2>&1; then
-    exiftool_orient=$(exiftool "$file" 2>/dev/null | grep -i "orientation" | head -1 | awk -F: '{print $2}' | xargs)
+    exiftool_orient=$(exiftool -s -s -s -Orientation -n "$file" 2>/dev/null)
     if [[ $debug_mode == true ]]; then
       echo "🐛   exiftool orientation: $exiftool_orient"
     fi
-    if [[ "$exiftool_orient" != "" ]]; then
-      case "$exiftool_orient" in
-        "Horizontal (normal)"|"1") echo "1";;
-        "Rotate 90 CW"|"6") echo "6";;
-        "Rotate 180"|"3") echo "3";;
-        "Rotate 270 CW"|"8") echo "8";;
-        "Mirror horizontal"|"2") echo "2";;
-        "Mirror vertical"|"4") echo "4";;
-        "Mirror horizontal and rotate 270 CW"|"5") echo "5";;
-        "Mirror horizontal and rotate 90 CW"|"7") echo "7";;
-        *) echo "<nil>";;
-      esac
+    if [[ -n "$exiftool_orient" && "$exiftool_orient" != "0" ]]; then
+      echo "$exiftool_orient"
+      return
+    fi
+
+    exiftool_rotation=$(exiftool -s -s -s -Rotation -n "$file" 2>/dev/null)
+    if [[ $debug_mode == true ]]; then
+      echo "🐛   exiftool rotation: $exiftool_rotation"
+    fi
+    if [[ -n "$exiftool_rotation" && "$exiftool_rotation" != "0" ]]; then
+      echo "$exiftool_rotation"
       return
     fi
   fi
@@ -223,7 +225,7 @@ ask_conflict(){
 
 # ─── Convert + Conflict Handler ─────────────────────────────────────────────────
 convert_and_handle_conflict(){
-  local input=$1 base out newW newH w h suffix temp_input
+  local input=$1 base out newW newH w h suffix temp_input orientation rotate_degrees rotated jpeg_out
   base=${input%.*}
   suffix=$([ "$do_resize" = true ] && echo "-$maxDim" || echo "")
   out="${base}${suffix}.webp"
@@ -305,7 +307,7 @@ convert_and_handle_conflict(){
       fi
       
       # Check EXIF orientation first
-      if [[ "$detected_orient" != "<nil>" && "$detected_orient" != "" && "$detected_orient" != "1" ]]; then
+      if [[ "$detected_orient" != "<nil>" && "$detected_orient" != "" && "$detected_orient" != "1" && "$detected_orient" != "0" ]]; then
         if [[ $debug_mode == true ]]; then
           echo "🐛   Applying EXIF orientation correction"
         fi
@@ -346,6 +348,30 @@ convert_and_handle_conflict(){
       ;;
   esac
 
+  # Map orientation codes to rotation degrees and fix pixels/dimensions
+  orientation=$(detect_orientation "$temp_input")
+  case "$orientation" in
+    6) rotate_degrees=90 ;;
+    3) rotate_degrees=180 ;;
+    8) rotate_degrees=270 ;;
+    *) rotate_degrees=0 ;;
+  esac
+
+  if (( rotate_degrees != 0 )); then
+    rotated="${base}_rot.jpg"
+    sips -r $rotate_degrees "$temp_input" --out "$rotated" >/dev/null 2>&1
+    sips -s orientation 1 "$rotated" >/dev/null 2>&1
+    if [[ "$temp_input" != "$input" ]]; then
+      rm -f "$temp_input"
+    fi
+    temp_input="$rotated"
+    if $do_resize && (( rotate_degrees == 90 || rotate_degrees == 270 )); then
+      local tmp=$newW
+      newW=$newH
+      newH=$tmp
+    fi
+  fi
+
   mkdir -p WEBP
   if [[ -e WEBP/$out ]]; then
     ask_conflict "$out"
@@ -379,6 +405,10 @@ convert_and_handle_conflict(){
   else
     # Normal processing through temp file
     cwebp "${cwebp_opts[@]}" "$temp_input" -o "WEBP/$out"
+  fi
+
+  if [[ $embed_meta == true ]]; then
+    exiftool -overwrite_original -Comment='Created with webpCreate (chachwick.com – github.com/chachwick/webpCreate)' "WEBP/$out" >/dev/null 2>&1
   fi
 
   # Create JPEG copy if requested
@@ -432,6 +462,10 @@ convert_and_handle_conflict(){
         sips -s formatOptions $jpeg_quality "$temp_input" --out "JPG/$jpeg_out" >/dev/null 2>&1
       fi
     fi
+  fi
+
+  if [[ $embed_meta == true && $create_jpeg == true && -f "JPG/$jpeg_out" ]]; then
+    exiftool -overwrite_original -Comment='Created with webpCreate (chachwick.com – github.com/chachwick/webpCreate)' "JPG/$jpeg_out" >/dev/null 2>&1
   fi
 
   # Clean up temp file (but not if it's the original in ignore mode)
