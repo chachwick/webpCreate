@@ -216,7 +216,7 @@ ask_conflict(){
 
 # ─── Convert + Conflict Handler ─────────────────────────────────────────────────
 convert_and_handle_conflict(){
-  local input=$1 base out newW newH w h suffix temp_input
+  local input=$1 base out newW newH w h suffix temp_input orientation rotate_degrees rotated
   base=${input%.*}
   suffix=$([ "$do_resize" = true ] && echo "-$maxDim" || echo "")
   out="${base}${suffix}.webp"
@@ -338,6 +338,30 @@ convert_and_handle_conflict(){
       fi
       ;;
   esac
+
+  # Map orientation codes to rotation degrees and fix pixels/dimensions
+  orientation=$(detect_orientation "$temp_input")
+  case "$orientation" in
+    6) rotate_degrees=90 ;;
+    3) rotate_degrees=180 ;;
+    8) rotate_degrees=270 ;;
+    *) rotate_degrees=0 ;;
+  esac
+
+  if (( rotate_degrees != 0 )); then
+    rotated="${base}_rot.jpg"
+    sips -r $rotate_degrees "$temp_input" --out "$rotated" >/dev/null 2>&1
+    sips -s orientation 1 "$rotated" >/dev/null 2>&1
+    if [[ "$temp_input" != "$input" ]]; then
+      rm -f "$temp_input"
+    fi
+    temp_input="$rotated"
+    if $do_resize && (( rotate_degrees == 90 || rotate_degrees == 270 )); then
+      local tmp=$newW
+      newW=$newH
+      newH=$tmp
+    fi
+  fi
 
   mkdir -p WEBP
   if [[ -e WEBP/$out ]]; then
